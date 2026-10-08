@@ -8,14 +8,16 @@ Cara menjalankan:
     streamlit run app_lkpd.py
 
 Struktur LKPD (1 langkah = 1 halaman):
-    Halaman 1  Sampul & Identitas
-    Halaman 2  Petunjuk, Tujuan & Orientasi Masalah
-    Halaman 3  Langkah 1 - Menentukan suku pertama (a)
-    Halaman 4  Langkah 2 - Menentukan beda (b)
-    Halaman 5  Langkah 3 - Menyusun rumus suku ke-n
-    Halaman 6  Langkah 4 - Menggunakan rumus
-    Halaman 7  Langkah 5 - Penalaran kritis
-    Halaman 8  Hasil, Kesimpulan & Refleksi
+    Halaman 1   Sampul & Identitas
+    Halaman 2   Petunjuk, Tujuan & Orientasi Masalah
+    Halaman 3   Langkah 1 - Menentukan suku pertama (a)
+    Halaman 4   Langkah 2 - Menentukan beda (b)
+    Halaman 5   Langkah 3 - Menyusun rumus suku ke-n
+    Halaman 6   Langkah 4 - Menggunakan rumus
+    Halaman 7   Langkah 5 - Penalaran kritis
+    Halaman 8   Langkah 6 - Masalah nyata: kursi bioskop
+    Halaman 9   Langkah 7 - Masalah nyata: menabung mandiri
+    Halaman 10  Hasil, Kesimpulan & Refleksi
 """
 
 import base64
@@ -93,6 +95,8 @@ POIN = {
     "jawab_rumus": 20,
     "jawab_suku": 20,
     "jawab_uji": 20,
+    "jawab_kursi": 20,
+    "jawab_tabung": 20,
 }
 LABEL_TAHAP = {
     "jawab_a": "Langkah 1 - Suku pertama (a)",
@@ -100,9 +104,11 @@ LABEL_TAHAP = {
     "jawab_rumus": "Langkah 3 - Rumus suku ke-n",
     "jawab_suku": "Langkah 4 - Menghitung Uₙ",
     "jawab_uji": "Langkah 5 - Penalaran kritis",
+    "jawab_kursi": "Langkah 6 - Kursi bioskop",
+    "jawab_tabung": "Langkah 7 - Menabung mandiri",
 }
 SKOR_MAKS_MISI = sum(POIN.values())
-TOTAL_HALAMAN = 8
+TOTAL_HALAMAN = 10
 
 # =========================================================
 # FUNGSI BANTU
@@ -381,15 +387,20 @@ def beri_skor(kunci):
 def reset_misi():
     for kunci in POIN:
         st.session_state[kunci] = False
-    for kunci in ("hint_a", "hint_b", "hint_rumus", "hint_uji"):
+    for kunci in ("hint_a", "hint_b", "hint_rumus", "hint_uji",
+                  "hint_kursi", "hint_tabung"):
         st.session_state[kunci] = False
     st.session_state.skor_misi = 0
     st.session_state.bukti_n = None
     st.session_state.uji = None
+    st.session_state.konteks = None
     st.session_state.misi_dihitung = False
     for kunci in ("in_a", "in_b", "in_koef", "in_konst", "in_n", "in_suku",
                   "in_uji_a", "in_uji_b"):
         st.session_state.pop(kunci, None)
+    for kasus in ("kursi", "tabung"):
+        for item in ("a", "b", "koef", "konst", "un", "n"):
+            st.session_state.pop(f"in_{kasus}_{item}", None)
 
 
 def tombol_petunjuk(flag_hint, flag_jawab, label="💡 Minta Petunjuk"):
@@ -414,6 +425,174 @@ def navigasi(kembali_ke, lanjut_ke, terbuka, label_kembali="⬅️ Kembali",
         else:
             st.button(f"🔒 {label_lanjut.split(' ', 1)[-1]}", disabled=True,
                       use_container_width=True, key="nav_kunci")
+
+
+# ---------- Soal kehidupan nyata ----------
+
+def rupiah(x):
+    """10000 -> 'Rp10.000'"""
+    return "Rp" + f"{x:,}".replace(",", ".")
+
+
+def ambil_konteks():
+    """Data soal kehidupan nyata: diacak sekali, tetap selama satu misi."""
+    if st.session_state.konteks is None:
+        baris = random.randint(8, 12)
+        st.session_state.konteks = {
+            "kursi": {
+                "a": random.choice([8, 10, 12, 14]),
+                "b": random.choice([2, 3, 4]),
+                "n_tanya": baris,
+                "n_cari": random.randint(4, baris - 1),
+            },
+            "tabung": {
+                "a": random.choice([10000, 15000, 20000]),
+                "b": random.choice([2000, 3000, 5000]),
+                "n_tanya": random.randint(8, 12),
+                "n_cari": random.randint(13, 20),
+            },
+        }
+    return st.session_state.konteks
+
+
+def svg_bioskop(a, b):
+    isi = ""
+    for i in range(4):
+        jml = a + i * b
+        y = 100 + i * 46
+        x_awal = 400 - jml * 20 / 2
+        for j in range(jml):
+            x = x_awal + j * 20
+            isi += (
+                f'<rect x="{x:.1f}" y="{y}" width="16" height="16" rx="4" fill="#ef4444"/>'
+                f'<rect x="{x + 2:.1f}" y="{y - 3}" width="12" height="5" rx="2" fill="#b91c1c"/>'
+            )
+        isi += (
+            f'<text x="40" y="{y + 14}" font-size="16" font-weight="700" fill="#e0e7ff">Baris {i + 1}</text>'
+            f'<text x="760" y="{y + 14}" text-anchor="end" font-size="16" fill="#fde68a">{jml} kursi</text>'
+        )
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" font-family="Arial, sans-serif">
+<rect width="800" height="300" rx="22" fill="#1e1b4b"/>
+<path d="M200 20 L600 20 L640 68 L160 68 Z" fill="#e2e8f0"/>
+<text x="400" y="52" text-anchor="middle" font-size="22" font-weight="800" fill="#1e1b4b" letter-spacing="6">LAYAR</text>
+{isi}
+<text x="400" y="284" text-anchor="middle" font-size="16" fill="#c7d2fe">⋮  baris-baris berikutnya bertambah dengan pola yang sama</text>
+</svg>"""
+
+
+def svg_tabungan(a, b):
+    vmax = a + 4 * b
+    batang = ""
+    for i in range(5):
+        v = a + i * b
+        h = 150 * v / vmax
+        x = 300 + i * 95
+        y = 230 - h
+        batang += (
+            f'<rect x="{x}" y="{y:.1f}" width="64" height="{h:.1f}" rx="8" fill="#f59e0b"/>'
+            f'<circle cx="{x + 32}" cy="{y:.1f}" r="15" fill="#fde68a" stroke="#d97706" stroke-width="3"/>'
+            f'<text x="{x + 32}" y="{y + 5:.1f}" text-anchor="middle" font-size="13" font-weight="800" fill="#b45309">Rp</text>'
+            f'<text x="{x + 32}" y="{y - 24:.1f}" text-anchor="middle" font-size="16" font-weight="700" fill="#9a3412">{v // 1000}rb</text>'
+            f'<text x="{x + 32}" y="254" text-anchor="middle" font-size="15" fill="#475569">Mgg {i + 1}</text>'
+        )
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" font-family="Arial, sans-serif">
+<rect width="800" height="300" rx="22" fill="#fdf2f8"/>
+<ellipse cx="130" cy="165" rx="76" ry="56" fill="#f9a8d4" stroke="#ec4899" stroke-width="4"/>
+<polygon points="95,122 108,88 136,120" fill="#ec4899"/>
+<ellipse cx="202" cy="172" rx="22" ry="17" fill="#f472b6" stroke="#ec4899" stroke-width="3"/>
+<circle cx="196" cy="172" r="3" fill="#9d174d"/><circle cx="208" cy="172" r="3" fill="#9d174d"/>
+<circle cx="166" cy="146" r="6" fill="#1f2937"/>
+<rect x="84" y="206" width="24" height="32" rx="6" fill="#ec4899"/>
+<rect x="150" y="206" width="24" height="32" rx="6" fill="#ec4899"/>
+<path d="M56 160 q-26 -10 -10 -32" fill="none" stroke="#ec4899" stroke-width="5" stroke-linecap="round"/>
+<rect x="108" y="116" width="44" height="8" rx="4" fill="#9d174d"/>
+<circle cx="130" cy="86" r="15" fill="#fde68a" stroke="#d97706" stroke-width="3"/>
+<text x="130" y="91" text-anchor="middle" font-size="13" font-weight="800" fill="#b45309">Rp</text>
+<text x="130" y="275" text-anchor="middle" font-size="18" font-weight="800" fill="#9d174d">Tabunganku</text>
+<line x1="270" y1="230" x2="780" y2="230" stroke="#64748b" stroke-width="3"/>
+<text x="525" y="30" text-anchor="middle" font-size="16" fill="#9a3412">Setoran tiap minggu naik secara teratur</text>
+{batang}
+</svg>"""
+
+
+def halaman_masalah(kunci, tag, judul, svg, cerita, c, fmt, tanya_un,
+                    tanya_n, sebelum, sesudah, step=1,
+                    label_lanjut="➡️ Langkah Berikutnya", aksi_lanjut=None):
+    """Satu halaman soal cerita barisan aritmatika (dipakai kursi & tabungan).
+
+    c = {"a", "b", "n_tanya", "n_cari"}; fmt = fungsi penampil nilai.
+    """
+    flag = f"jawab_{kunci}"
+    a_, b_ = c["a"], c["b"]
+    k_ = a_ - b_
+    n_tanya, n_cari = c["n_tanya"], c["n_cari"]
+    un_tanya = a_ + (n_tanya - 1) * b_
+    nilai_cari = a_ + (n_cari - 1) * b_
+    batas = 100_000_000
+
+    judul_langkah(tag, judul)
+    tampil_svg(svg)
+    kartu(cerita)
+
+    st.markdown("### ✏️ Lembar Jawaban")
+
+    st.markdown("**1. Kenali polanya**")
+    k1, k2 = st.columns(2)
+    ia = k1.number_input("Suku pertama (a):", -batas, batas, 0, step, key=f"in_{kunci}_a")
+    ib = k2.number_input("Beda (b):", -batas, batas, 0, step, key=f"in_{kunci}_b")
+
+    st.markdown("**2. Susun rumus** dalam bentuk $U_n = bn + k$")
+    k3, k4 = st.columns(2)
+    ik = k3.number_input("Koefisien n (b):", -batas, batas, 0, step, key=f"in_{kunci}_koef")
+    ikon = k4.number_input("Konstanta (k):", -batas, batas, 0, step, key=f"in_{kunci}_konst")
+
+    st.markdown(f"**3.** {tanya_un}")
+    iun = st.number_input("Jawabanmu:", -batas, batas, 0, step, key=f"in_{kunci}_un")
+
+    st.markdown(f"**4.** {tanya_n}")
+    iN = st.number_input("Nilai n:", 0, 1000, 0, 1, key=f"in_{kunci}_n")
+
+    if st.button("🔎 Periksa Jawaban", use_container_width=True, key=f"cek_{kunci}"):
+        cek = {
+            "suku pertama (a)": ia == a_,
+            "beda (b)": ib == b_,
+            "koefisien n": ik == b_,
+            "konstanta": ikon == k_,
+            "jawaban nomor 3": iun == un_tanya,
+            "jawaban nomor 4": iN == n_cari,
+        }
+        salah = [nama for nama, ok in cek.items() if not ok]
+        if not salah:
+            beri_skor(flag)
+        else:
+            st.error(
+                "❌ Masih ada yang belum tepat: " + ", ".join(salah)
+                + ". Baca ceritanya sekali lagi."
+            )
+
+    if st.session_state[flag]:
+        st.success("🎉 Hebat! Semua jawabanmu benar.")
+        st.markdown("**Pembahasan**")
+        st.latex(f"U_n = {a_} + (n-1)({b_})")
+        st.latex(rumus_latex(a_, b_))
+        st.latex(f"U_{{{n_tanya}}} = {b_}({n_tanya}) + ({k_}) = {un_tanya}")
+        st.latex(rf"n = \frac{{{nilai_cari - k_}}}{{{b_}}} = {n_cari}")
+        st.info(
+            f"Jadi, pada urutan ke-{n_tanya} nilainya {fmt(un_tanya)}, "
+            f"dan {fmt(nilai_cari)} berada pada urutan ke-{n_cari}."
+        )
+
+    tombol_petunjuk(f"hint_{kunci}", flag)
+    if st.session_state[f"hint_{kunci}"] and not st.session_state[flag]:
+        st.info(
+            "Petunjuk: nilai pada urutan pertama adalah a, dan selisih dua "
+            "urutan berdekatan adalah b. Gunakan $U_n = a + (n-1)b$. "
+            "Untuk nomor 4, tulis $U_n$ sama dengan nilai yang ditanyakan, "
+            "lalu cari $n$."
+        )
+
+    navigasi(sebelum, sesudah, st.session_state[flag],
+             label_lanjut=label_lanjut, aksi_lanjut=aksi_lanjut)
 
 
 def buat_lkpd_html():
@@ -467,8 +646,10 @@ DEFAULTS = {
     "skor_misi": 0, "skor_total": 0, "misi_selesai": 0, "misi_dihitung": False,
     "jawab_a": False, "jawab_b": False, "jawab_rumus": False,
     "jawab_suku": False, "jawab_uji": False,
+    "jawab_kursi": False, "jawab_tabung": False,
     "hint_a": False, "hint_b": False, "hint_rumus": False, "hint_uji": False,
-    "bukti_n": None, "uji": None, "refleksi": "",
+    "hint_kursi": False, "hint_tabung": False,
+    "bukti_n": None, "uji": None, "konteks": None, "refleksi": "",
 }
 for kunci, nilai in DEFAULTS.items():
     st.session_state.setdefault(kunci, nilai)
@@ -515,7 +696,9 @@ with st.sidebar:
         (5, "Langkah 3: Rumus Uₙ"),
         (6, "Langkah 4: Hitung Uₙ"),
         (7, "Langkah 5: Penalaran kritis"),
-        (8, "Hasil & Refleksi"),
+        (8, "Langkah 6: Kursi bioskop"),
+        (9, "Langkah 7: Menabung mandiri"),
+        (10, "Hasil & Refleksi"),
     ]
     for nomor, label in tahap:
         if halaman > nomor:
@@ -599,7 +782,7 @@ elif halaman == 2:
 
     st.subheader("📋 Petunjuk Pengerjaan")
     kartu(
-        "1. Kerjakan <b>satu langkah per halaman</b>, berurutan dari Langkah 1 sampai 5.<br>"
+        "1. Kerjakan <b>satu langkah per halaman</b>, berurutan dari Langkah 1 sampai 7.<br>"
         "2. Tekan <b>Periksa</b> untuk mengecek jawabanmu.<br>"
         "3. Gunakan <b>Minta Petunjuk</b> jika kesulitan.<br>"
         "4. Langkah berikutnya terbuka setelah jawabanmu benar.<br>"
@@ -617,7 +800,7 @@ elif halaman == 2:
 # =========================================================
 
 elif halaman == 3:
-    judul_langkah("LANGKAH 1 DARI 5", "🟦 Menentukan Suku Pertama (a)")
+    judul_langkah("LANGKAH 1 DARI 7", "🟦 Menentukan Suku Pertama (a)")
 
     tampil_svg(svg_tangga(barisan))
 
@@ -656,7 +839,7 @@ elif halaman == 3:
 # =========================================================
 
 elif halaman == 4:
-    judul_langkah("LANGKAH 2 DARI 5", "🟩 Menentukan Beda (b)")
+    judul_langkah("LANGKAH 2 DARI 7", "🟩 Menentukan Beda (b)")
 
     tampil_svg(svg_loncatan(barisan, b if st.session_state.jawab_b else None))
 
@@ -693,7 +876,7 @@ elif halaman == 4:
 # =========================================================
 
 elif halaman == 5:
-    judul_langkah("LANGKAH 3 DARI 5", "🟨 Menyusun Rumus Suku ke-n")
+    judul_langkah("LANGKAH 3 DARI 7", "🟨 Menyusun Rumus Suku ke-n")
 
     tampil_svg(svg_mesin("a + (n−1)b"))
 
@@ -747,7 +930,7 @@ elif halaman == 5:
 # =========================================================
 
 elif halaman == 6:
-    judul_langkah("LANGKAH 4 DARI 5", "🟥 Menggunakan Rumus")
+    judul_langkah("LANGKAH 4 DARI 7", "🟥 Menggunakan Rumus")
 
     tampil_svg(svg_grafik(a, b))
 
@@ -790,7 +973,7 @@ elif halaman == 6:
 # =========================================================
 
 elif halaman == 7:
-    judul_langkah("LANGKAH 5 DARI 5", "🟪 Penalaran Kritis")
+    judul_langkah("LANGKAH 5 DARI 7", "🟪 Penalaran Kritis")
 
     if st.session_state.uji is None:
         nt = random.randint(12, 30)
@@ -847,19 +1030,74 @@ elif halaman == 7:
             "lalu cari $n$. Nomor suku harus bilangan bulat positif."
         )
 
+    navigasi(6, 8, st.session_state.jawab_uji)
+
+# =========================================================
+# HALAMAN 8 - LANGKAH 6: KURSI BIOSKOP
+# =========================================================
+
+elif halaman == 8:
+    c = ambil_konteks()["kursi"]
+    nilai_k = c["a"] + (c["n_cari"] - 1) * c["b"]
+    halaman_masalah(
+        kunci="kursi",
+        tag="LANGKAH 6 DARI 7",
+        judul="🎬 Masalah Nyata: Kursi Bioskop",
+        svg=svg_bioskop(c["a"], c["b"]),
+        cerita=(
+            f"Sebuah bioskop menata kursi penonton dalam <b>{c['n_tanya']} baris</b>. "
+            f"Baris paling depan (baris ke-1) berisi <b>{c['a']} kursi</b>. "
+            f"Baris-baris di belakangnya selalu memiliki <b>{c['b']} kursi lebih banyak</b> "
+            "daripada baris tepat di depannya."
+        ),
+        c=c,
+        fmt=lambda x: f"{x} kursi",
+        tanya_un=f"Berapa banyak kursi pada baris paling belakang (baris ke-{c['n_tanya']})?",
+        tanya_n=f"Pada baris ke berapakah terdapat {nilai_k} kursi?",
+        sebelum=7,
+        sesudah=9,
+    )
+
+# =========================================================
+# HALAMAN 9 - LANGKAH 7: MENABUNG MANDIRI
+# =========================================================
+
+elif halaman == 9:
+    c = ambil_konteks()["tabung"]
+    nilai_t = c["a"] + (c["n_cari"] - 1) * c["b"]
+
     def _hitung_misi():
         if not st.session_state.misi_dihitung:
             st.session_state.misi_selesai += 1
             st.session_state.misi_dihitung = True
 
-    navigasi(6, 8, st.session_state.jawab_uji,
-             label_lanjut="🏆 Lihat Hasil", aksi_lanjut=_hitung_misi)
+    halaman_masalah(
+        kunci="tabung",
+        tag="LANGKAH 7 DARI 7",
+        judul="🐷 Masalah Nyata: Menabung Mandiri",
+        svg=svg_tabungan(c["a"], c["b"]),
+        cerita=(
+            "Dina ingin membiasakan diri menabung secara mandiri setiap minggu. "
+            f"Pada minggu pertama ia menabung <b>{rupiah(c['a'])}</b>. "
+            f"Setiap minggu berikutnya, tabungannya <b>{rupiah(c['b'])} lebih banyak</b> "
+            "daripada minggu sebelumnya."
+        ),
+        c=c,
+        fmt=rupiah,
+        step=500,
+        tanya_un=f"Berapa rupiah yang Dina tabung pada minggu ke-{c['n_tanya']}?",
+        tanya_n=f"Pada minggu ke berapakah Dina menabung sebesar {rupiah(nilai_t)}?",
+        sebelum=8,
+        sesudah=10,
+        label_lanjut="🏆 Lihat Hasil",
+        aksi_lanjut=_hitung_misi,
+    )
 
 # =========================================================
-# HALAMAN 8 - HASIL, KESIMPULAN & REFLEKSI
+# HALAMAN 10 - HASIL, KESIMPULAN & REFLEKSI
 # =========================================================
 
-elif halaman == 8:
+elif halaman == 10:
     tampil_svg(svg_piala())
 
     st.success(
