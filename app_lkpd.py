@@ -22,6 +22,7 @@ Struktur LKPD (1 langkah = 1 halaman):
 
 import base64
 import html
+import os
 import random
 from datetime import datetime
 
@@ -97,6 +98,7 @@ POIN = {
     "jawab_uji": 20,
     "jawab_kursi": 20,
     "jawab_tabung": 20,
+    "jawab_sn": 30,
 }
 LABEL_TAHAP = {
     "jawab_a": "Langkah 1 - Suku pertama (a)",
@@ -106,9 +108,10 @@ LABEL_TAHAP = {
     "jawab_uji": "Langkah 5 - Penalaran kritis",
     "jawab_kursi": "Langkah 6 - Kursi bioskop",
     "jawab_tabung": "Langkah 7 - Menabung mandiri",
+    "jawab_sn": "Langkah 8 - Total tabungan (Sₙ)",
 }
 SKOR_MAKS_MISI = sum(POIN.values())
-TOTAL_HALAMAN = 10
+TOTAL_HALAMAN = 11
 
 # =========================================================
 # FUNGSI BANTU
@@ -388,7 +391,7 @@ def reset_misi():
     for kunci in POIN:
         st.session_state[kunci] = False
     for kunci in ("hint_a", "hint_b", "hint_rumus", "hint_uji",
-                  "hint_kursi", "hint_tabung"):
+                  "hint_kursi", "hint_tabung", "hint_sn"):
         st.session_state[kunci] = False
     st.session_state.skor_misi = 0
     st.session_state.bukti_n = None
@@ -401,6 +404,8 @@ def reset_misi():
     for kasus in ("kursi", "tabung"):
         for item in ("a", "b", "koef", "konst", "un", "n"):
             st.session_state.pop(f"in_{kasus}_{item}", None)
+    for item in ("p", "q", "s6", "un", "sn", "tc"):
+        st.session_state.pop(f"in_sn_{item}", None)
 
 
 def tombol_petunjuk(flag_hint, flag_jawab, label="💡 Minta Petunjuk"):
@@ -595,6 +600,66 @@ def halaman_masalah(kunci, tag, judul, svg, cerita, c, fmt, tanya_un,
              label_lanjut=label_lanjut, aksi_lanjut=aksi_lanjut)
 
 
+def svg_pasangan(a, b, n=6):
+    """Ilustrasi trik pasangan: suku pertama + terakhir = suku kedua + ke-(n-1) ..."""
+    nilai = [a + i * b for i in range(n)]
+    xs = [70 + i * 118 for i in range(n)]
+    warna = ["#ef4444", "#f59e0b", "#10b981"]
+    puncak = [50, 88, 126]
+    isi = ""
+    for k in range(n // 2):
+        x1 = xs[k] + 45
+        x2 = xs[n - 1 - k] + 45
+        mid = (x1 + x2) / 2
+        ctrl = 2 * puncak[k] - 190
+        isi += (
+            f'<path d="M{x1} 186 Q{mid} {ctrl} {x2} 186" fill="none" '
+            f'stroke="{warna[k]}" stroke-width="5"/>'
+            f'<rect x="{mid - 52}" y="{puncak[k] - 14}" width="104" height="28" rx="14" '
+            f'fill="#ffffff" stroke="{warna[k]}" stroke-width="3"/>'
+            f'<text x="{mid}" y="{puncak[k] + 5}" text-anchor="middle" font-size="14" '
+            f'font-weight="800" fill="#0f172a">jumlah = ?</text>'
+        )
+    for i, (x, v) in enumerate(zip(xs, nilai)):
+        w = warna[min(i, n - 1 - i)]
+        isi += (
+            f'<rect x="{x}" y="190" width="90" height="70" rx="14" fill="{w}"/>'
+            f'<text x="{x + 45}" y="234" text-anchor="middle" font-size="26" '
+            f'font-weight="800" fill="#ffffff">{v // 1000}rb</text>'
+            f'<text x="{x + 45}" y="284" text-anchor="middle" font-size="15" '
+            f'fill="#334155">Mgg {i + 1}</text>'
+        )
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" font-family="Arial, sans-serif">
+<rect width="800" height="300" rx="22" fill="#f0f9ff"/>
+<text x="400" y="24" text-anchor="middle" font-size="15" fill="#0369a1">Pasangkan minggu pertama dengan minggu terakhir, kedua dengan sebelum terakhir, dst.</text>
+{isi}
+</svg>"""
+
+
+@st.cache_resource
+def muat_backsound():
+    """Membaca backsound.mp3 (atau .wav) yang diletakkan sefolder dengan app_lkpd.py."""
+    folder = os.path.dirname(os.path.abspath(__file__))
+    for nama, mime in (("backsound.mp3", "audio/mpeg"), ("backsound.wav", "audio/wav")):
+        jalur = os.path.join(folder, nama)
+        if os.path.exists(jalur):
+            with open(jalur, "rb") as f:
+                return f.read(), mime
+    return None, None
+
+
+def putar_backsound():
+    data, mime = muat_backsound()
+    if data is None:
+        st.caption("⚠️ File backsound.mp3 belum ada di folder aplikasi.")
+        return
+    st.caption("🎧 Backsound")
+    try:
+        st.audio(data, format=mime, loop=True, autoplay=True)
+    except TypeError:  # Streamlit versi lama belum mengenal loop/autoplay
+        st.audio(data, format=mime)
+
+
 def buat_lkpd_html():
     """Lembar hasil LKPD yang bisa dicetak / disimpan sebagai PDF dari browser."""
     s = st.session_state
@@ -646,9 +711,9 @@ DEFAULTS = {
     "skor_misi": 0, "skor_total": 0, "misi_selesai": 0, "misi_dihitung": False,
     "jawab_a": False, "jawab_b": False, "jawab_rumus": False,
     "jawab_suku": False, "jawab_uji": False,
-    "jawab_kursi": False, "jawab_tabung": False,
+    "jawab_kursi": False, "jawab_tabung": False, "jawab_sn": False,
     "hint_a": False, "hint_b": False, "hint_rumus": False, "hint_uji": False,
-    "hint_kursi": False, "hint_tabung": False,
+    "hint_kursi": False, "hint_tabung": False, "hint_sn": False,
     "bukti_n": None, "uji": None, "konteks": None, "refleksi": "",
 }
 for kunci, nilai in DEFAULTS.items():
@@ -678,6 +743,13 @@ st.markdown(
 )
 
 with st.sidebar:
+    st.checkbox("🎵 Backsound", value=True, key="musik_aktif")
+    if st.session_state.musik_aktif:
+        if 2 <= halaman <= TOTAL_HALAMAN - 1:
+            putar_backsound()
+        elif halaman == 1:
+            st.caption("🎧 Backsound menyala otomatis saat misi dimulai.")
+    st.markdown("---")
     st.title("🔎 Math Detective")
     st.markdown("---")
     if st.session_state.nama:
@@ -697,8 +769,9 @@ with st.sidebar:
         (6, "Langkah 4: Hitung Uₙ"),
         (7, "Langkah 5: Penalaran kritis"),
         (8, "Langkah 6: Kursi bioskop"),
-        (9, "Langkah 7: Menabung mandiri"),
-        (10, "Hasil & Refleksi"),
+        (9, "Langkah 7: Menabung (Uₙ)"),
+        (10, "Langkah 8: Total tabungan (Sₙ)"),
+        (11, "Hasil & Refleksi"),
     ]
     for nomor, label in tahap:
         if halaman > nomor:
@@ -782,7 +855,7 @@ elif halaman == 2:
 
     st.subheader("📋 Petunjuk Pengerjaan")
     kartu(
-        "1. Kerjakan <b>satu langkah per halaman</b>, berurutan dari Langkah 1 sampai 7.<br>"
+        "1. Kerjakan <b>satu langkah per halaman</b>, berurutan dari Langkah 1 sampai 8.<br>"
         "2. Tekan <b>Periksa</b> untuk mengecek jawabanmu.<br>"
         "3. Gunakan <b>Minta Petunjuk</b> jika kesulitan.<br>"
         "4. Langkah berikutnya terbuka setelah jawabanmu benar.<br>"
@@ -800,7 +873,7 @@ elif halaman == 2:
 # =========================================================
 
 elif halaman == 3:
-    judul_langkah("LANGKAH 1 DARI 7", "🟦 Menentukan Suku Pertama (a)")
+    judul_langkah("LANGKAH 1 DARI 8", "🟦 Menentukan Suku Pertama (a)")
 
     tampil_svg(svg_tangga(barisan))
 
@@ -839,7 +912,7 @@ elif halaman == 3:
 # =========================================================
 
 elif halaman == 4:
-    judul_langkah("LANGKAH 2 DARI 7", "🟩 Menentukan Beda (b)")
+    judul_langkah("LANGKAH 2 DARI 8", "🟩 Menentukan Beda (b)")
 
     tampil_svg(svg_loncatan(barisan, b if st.session_state.jawab_b else None))
 
@@ -876,7 +949,7 @@ elif halaman == 4:
 # =========================================================
 
 elif halaman == 5:
-    judul_langkah("LANGKAH 3 DARI 7", "🟨 Menyusun Rumus Suku ke-n")
+    judul_langkah("LANGKAH 3 DARI 8", "🟨 Menyusun Rumus Suku ke-n")
 
     tampil_svg(svg_mesin("a + (n−1)b"))
 
@@ -930,7 +1003,7 @@ elif halaman == 5:
 # =========================================================
 
 elif halaman == 6:
-    judul_langkah("LANGKAH 4 DARI 7", "🟥 Menggunakan Rumus")
+    judul_langkah("LANGKAH 4 DARI 8", "🟥 Menggunakan Rumus")
 
     tampil_svg(svg_grafik(a, b))
 
@@ -973,7 +1046,7 @@ elif halaman == 6:
 # =========================================================
 
 elif halaman == 7:
-    judul_langkah("LANGKAH 5 DARI 7", "🟪 Penalaran Kritis")
+    judul_langkah("LANGKAH 5 DARI 8", "🟪 Penalaran Kritis")
 
     if st.session_state.uji is None:
         nt = random.randint(12, 30)
@@ -1041,7 +1114,7 @@ elif halaman == 8:
     nilai_k = c["a"] + (c["n_cari"] - 1) * c["b"]
     halaman_masalah(
         kunci="kursi",
-        tag="LANGKAH 6 DARI 7",
+        tag="LANGKAH 6 DARI 8",
         judul="🎬 Masalah Nyata: Kursi Bioskop",
         svg=svg_bioskop(c["a"], c["b"]),
         cerita=(
@@ -1059,21 +1132,16 @@ elif halaman == 8:
     )
 
 # =========================================================
-# HALAMAN 9 - LANGKAH 7: MENABUNG MANDIRI
+# HALAMAN 9 - LANGKAH 7: MENABUNG MANDIRI (Un)
 # =========================================================
 
 elif halaman == 9:
     c = ambil_konteks()["tabung"]
     nilai_t = c["a"] + (c["n_cari"] - 1) * c["b"]
 
-    def _hitung_misi():
-        if not st.session_state.misi_dihitung:
-            st.session_state.misi_selesai += 1
-            st.session_state.misi_dihitung = True
-
     halaman_masalah(
         kunci="tabung",
-        tag="LANGKAH 7 DARI 7",
+        tag="LANGKAH 7 DARI 8",
         judul="🐷 Masalah Nyata: Menabung Mandiri",
         svg=svg_tabungan(c["a"], c["b"]),
         cerita=(
@@ -1089,15 +1157,121 @@ elif halaman == 9:
         tanya_n=f"Pada minggu ke berapakah Dina menabung sebesar {rupiah(nilai_t)}?",
         sebelum=8,
         sesudah=10,
-        label_lanjut="🏆 Lihat Hasil",
-        aksi_lanjut=_hitung_misi,
     )
 
 # =========================================================
-# HALAMAN 10 - HASIL, KESIMPULAN & REFLEKSI
+# HALAMAN 10 - LANGKAH 8: TOTAL TABUNGAN (Sn)
 # =========================================================
 
 elif halaman == 10:
+    c = ambil_konteks()["tabung"]
+    a_, b_ = c["a"], c["b"]
+    n_s = c["n_tanya"] + 4                      # 12 - 16 minggu
+    u6 = a_ + 5 * b_
+    un_s = a_ + (n_s - 1) * b_
+    sn_s = n_s * (a_ + un_s) // 2               # selalu bilangan bulat
+    tercapai = c["n_cari"] % 2 == 1             # variasi: tercapai / belum
+    target = sn_s - 3 * b_ if tercapai else sn_s + 3 * b_
+    pilihan_benar = "Ya, target tercapai" if tercapai else "Tidak, target belum tercapai"
+    batas = 100_000_000
+
+    def _hitung_misi():
+        if not st.session_state.misi_dihitung:
+            st.session_state.misi_selesai += 1
+            st.session_state.misi_dihitung = True
+
+    judul_langkah("LANGKAH 8 DARI 8", "💰 Total Tabungan: Jumlah n Suku Pertama (Sₙ)")
+    tampil_svg(svg_pasangan(a_, b_))
+
+    kartu(
+        "Dina sudah tahu berapa yang ia tabung tiap minggu "
+        f"(minggu pertama <b>{rupiah(a_)}</b>, naik <b>{rupiah(b_)}</b> tiap minggu). "
+        "Sekarang ia ingin tahu <b>total uang yang terkumpul</b>. "
+        "Jumlah n suku pertama sebuah barisan disebut <b>Sₙ</b>."
+    )
+
+    st.markdown("### 🔍 Bagian A - Temukan trik pasangan")
+    st.write(
+        "Perhatikan 6 minggu pertama pada gambar. Setiap pasangan "
+        "(garis berwarna) punya jumlah yang sama."
+    )
+
+    st.markdown("**1.** Berapa $U_1 + U_6$ (dalam rupiah)?")
+    ip = st.number_input("Jawabanmu:", -batas, batas, 0, 500, key="in_sn_p")
+
+    st.markdown("**2.** Ada berapa pasangan yang terbentuk dari 6 minggu?")
+    iq = st.number_input("Banyak pasangan:", 0, 100, 0, 1, key="in_sn_q")
+
+    st.markdown("**3.** Berapa total tabungan 6 minggu pertama ($S_6$)?")
+    is6 = st.number_input("Jawabanmu:", -batas, batas, 0, 500, key="in_sn_s6")
+
+    st.markdown("---")
+    st.markdown("### 🧮 Bagian B - Terapkan pada target Dina")
+    kartu(
+        f"Dina menabung selama <b>{n_s} minggu</b> dan menargetkan total tabungan "
+        f"sebesar <b>{rupiah(target)}</b>."
+    )
+
+    st.markdown(f"**4.** Berapa rupiah yang Dina tabung pada minggu ke-{n_s} ($U_{{{n_s}}}$)?")
+    iun = st.number_input("Jawabanmu:", -batas, batas, 0, 500, key="in_sn_un")
+
+    st.markdown(f"**5.** Berapa total tabungan selama {n_s} minggu ($S_{{{n_s}}}$)?")
+    isn = st.number_input("Jawabanmu:", -batas, batas, 0, 500, key="in_sn_sn")
+
+    st.markdown("**6.** Apakah target Dina tercapai?")
+    ipil = st.selectbox(
+        "Pilih kesimpulanmu:",
+        ["— pilih —", "Ya, target tercapai", "Tidak, target belum tercapai"],
+        key="in_sn_tc",
+    )
+
+    if st.button("🔎 Periksa Jawaban", use_container_width=True, key="cek_sn"):
+        cek = {
+            "nomor 1 (U₁ + U₆)": ip == a_ + u6,
+            "nomor 2 (banyak pasangan)": iq == 3,
+            "nomor 3 (S₆)": is6 == 3 * (a_ + u6),
+            f"nomor 4 (U{sub(n_s)})": iun == un_s,
+            f"nomor 5 (S{sub(n_s)})": isn == sn_s,
+            "nomor 6 (kesimpulan target)": ipil == pilihan_benar,
+        }
+        salah = [nama for nama, ok in cek.items() if not ok]
+        if not salah:
+            beri_skor("jawab_sn")
+        else:
+            st.error("❌ Masih ada yang belum tepat: " + ", ".join(salah) + ".")
+
+    if st.session_state.jawab_sn:
+        st.success("🎉 Luar biasa! Kamu menemukan cara menghitung total tabungan.")
+        st.markdown("**Pembahasan**")
+        st.latex(rf"S_6 = 3 \times (U_1 + U_6) = 3 \times {a_ + u6} = {3 * (a_ + u6)}")
+        st.markdown("Trik pasangan ini menghasilkan **rumus jumlah n suku pertama**:")
+        st.latex(r"S_n = \frac{n}{2}\,(a + U_n)")
+        st.latex(r"S_n = \frac{n}{2}\,\big(2a + (n-1)b\big)")
+        st.latex(rf"U_{{{n_s}}} = {a_} + ({n_s}-1)({b_}) = {un_s}")
+        st.latex(rf"S_{{{n_s}}} = \frac{{{n_s}}}{{2}}\,({a_} + {un_s}) = {sn_s}")
+        st.info(
+            f"Total tabungan {n_s} minggu: {rupiah(sn_s)}. "
+            f"Target {rupiah(target)} "
+            + ("sudah tercapai." if tercapai else "belum tercapai.")
+        )
+
+    tombol_petunjuk("hint_sn", "jawab_sn")
+    if st.session_state.hint_sn and not st.session_state.jawab_sn:
+        st.info(
+            "Petunjuk: jumlah tiap pasangan sama dengan $U_1 + U_6$. "
+            "$S_n$ = banyak pasangan $\\times$ jumlah satu pasangan, atau "
+            "$S_n = \\frac{n}{2}(a + U_n)$. Untuk nomor 6, bandingkan "
+            "$S_n$ dengan target."
+        )
+
+    navigasi(9, 11, st.session_state.jawab_sn,
+             label_lanjut="🏆 Lihat Hasil", aksi_lanjut=_hitung_misi)
+
+# =========================================================
+# HALAMAN 11 - HASIL, KESIMPULAN & REFLEKSI
+# =========================================================
+
+elif halaman == 11:
     tampil_svg(svg_piala())
 
     st.success(
