@@ -379,12 +379,193 @@ def pindah_halaman(nomor):
     st.rerun()
 
 
-def beri_skor(kunci):
-    """Menambah skor hanya sekali per misi untuk tiap tahap."""
-    if not st.session_state[kunci]:
-        st.session_state.skor_misi += POIN[kunci]
-        st.session_state.skor_total += POIN[kunci]
+# ---------- Pencatatan jawaban & analisis kesalahan ----------
+# Jawaban siswa (benar maupun salah) selalu DIKIRIM dan disimpan.
+# Benar-salahnya tidak ditampilkan langsung, tetapi dibahas di bagian
+# Refleksi pada akhir LKPD (halaman 11).
+
+def _f(x):
+    return str(x)
+
+
+def item(label, jawab, benar, ok, catatan="", f=_f):
+    """Satu butir jawaban siswa yang akan dibahas di bagian Refleksi."""
+    return {
+        "label": label,
+        "jawab": f(jawab),
+        "benar": f(benar),
+        "ok": bool(ok),
+        "catatan": catatan,
+    }
+
+
+def catat(kunci, daftar, masukan):
+    """Menyimpan jawaban terkirim. Boleh dikirim ulang sebelum lanjut."""
+    rekam = st.session_state.rekam
+    lama = rekam.get(kunci, {})
+    jumlah_ok = sum(1 for d in daftar if d["ok"])
+    poin = round(POIN[kunci] * jumlah_ok / len(daftar))
+    selisih = poin - lama.get("poin", 0)
+    st.session_state.skor_misi += selisih
+    st.session_state.skor_total += selisih
+    rekam[kunci] = {
+        "items": daftar,
+        "poin": poin,
+        "kirim": lama.get("kirim", 0) + 1,
+        "masukan": masukan,
+    }
     st.session_state[kunci] = True
+
+
+def awal(kunci, nama, default=0):
+    """Nilai terakhir yang dikirim siswa (untuk mengisi kembali kolom)."""
+    return st.session_state.rekam.get(kunci, {}).get("masukan", {}).get(nama, default)
+
+
+def info_terkirim(kunci):
+    if st.session_state[kunci]:
+        st.success(
+            "📨 Jawabanmu sudah terkirim! Kamu boleh mengubahnya lalu kirim "
+            "lagi, atau lanjut ke langkah berikutnya. Benar atau salahnya "
+            "akan dibahas di bagian **Refleksi** pada akhir LKPD."
+        )
+
+
+def ab_siswa():
+    """a dan b yang dikirim siswa pada Langkah 1 dan 2."""
+    return awal("jawab_a", "a", 0), awal("jawab_b", "b", 0)
+
+
+def rumus_siswa():
+    """(koefisien n, konstanta) yang dikirim siswa pada Langkah 3."""
+    return awal("jawab_rumus", "koef", 0), awal("jawab_rumus", "konst", 0)
+
+
+# ---------- Diagnosis letak kesalahan (kesalahan umum) ----------
+
+def cat_a(v, a, b, f=_f):
+    benar = f"Suku pertama a = U₁ adalah angka paling awal pada barisan, yaitu {f(a)}."
+    if v == 0:
+        return "Bagian ini belum kamu isi (nilainya masih 0). " + benar
+    if v == a + b:
+        return "Kamu menulis suku kedua (U₂). " + benar
+    if v == b:
+        return "Kamu menulis beda (b), padahal yang ditanyakan suku pertama (a). " + benar
+    return benar
+
+
+def cat_b(v, a, b, f=_f):
+    benar = f"Beda b = U₂ − U₁ = {f(a + b)} − {f(a)} = {f(b)}."
+    if v == 0:
+        return "Bagian ini belum kamu isi (nilainya masih 0). " + benar
+    if v == -b:
+        return ("Tandanya terbalik: beda dihitung dari suku berikutnya dikurangi "
+                "suku sebelumnya (U₂ − U₁). " + benar)
+    if v == a:
+        return "Kamu menulis suku pertama (a), padahal beda adalah selisih dua suku berurutan. " + benar
+    if v == a + b:
+        return "Kamu menulis suku kedua (U₂), bukan selisihnya. " + benar
+    return benar
+
+
+def cat_koef(v, a, b, f=_f):
+    benar = f"Karena (n − 1)b dijabarkan menjadi bn − b, koefisien n adalah b = {f(b)}."
+    if v == 0:
+        return "Bagian ini belum kamu isi (nilainya masih 0). " + benar
+    if v == a:
+        return "Kamu menulis a sebagai koefisien n. " + benar
+    return benar
+
+
+def cat_konst(v, a, b, f=_f):
+    benar = f"Konstanta = a − b = {f(a)} − {f(b)} = {f(a - b)}."
+    if v == 0:
+        return "Bagian ini belum kamu isi (nilainya masih 0). " + benar
+    if v == a:
+        return ("Kamu belum menggabungkan −b hasil penjabaran (n − 1)b dengan a. " + benar)
+    if v == a + b:
+        return ("Tanda b keliru: (n − 1)b = bn − b, sehingga b dikurangkan, bukan ditambahkan. "
+                + benar)
+    if v == -b:
+        return "Kamu hanya menulis −b dan lupa menambahkan a. " + benar
+    return benar
+
+
+def cat_un(v, a, b, n, f=_f):
+    k = a - b
+    hasil = b * n + k
+    benar = (f"Substitusikan n = {n} ke Uₙ = {b}n + ({k}): "
+             f"{b} × {n} + ({k}) = {f(hasil)}.")
+    if v == 0:
+        return "Bagian ini belum kamu isi (nilainya masih 0). " + benar
+    if v == a + n * b:
+        return "Kamu memakai n, bukan (n − 1), sehingga hasilnya lebih besar satu beda. " + benar
+    if v == b * n:
+        return "Kamu lupa menambahkan konstanta pada rumus. " + benar
+    return benar
+
+
+def cat_n(v, a, b, n_target, f=_f):
+    k = a - b
+    nilai = a + (n_target - 1) * b
+    benar = (f"Susun {b}n + ({k}) = {f(nilai)}, lalu "
+             f"n = ({nilai} − ({k})) ÷ {b} = {n_target}.")
+    if v == 0:
+        return "Bagian ini belum kamu isi (nilainya masih 0). " + benar
+    if abs(v - n_target) == 1:
+        return "Jawabanmu selisih satu dari yang benar. Cek dengan memasukkan n ke rumus. " + benar
+    return benar
+
+
+# ---------- Pembahasan di bagian Refleksi ----------
+
+def status_langkah(kunci):
+    """(jumlah butir benar, jumlah butir) atau None jika belum dikerjakan."""
+    r = st.session_state.rekam.get(kunci)
+    if not r:
+        return None
+    return sum(1 for d in r["items"] if d["ok"]), len(r["items"])
+
+
+def tampil_pembahasan():
+    rekam = st.session_state.rekam
+
+    baris = ["| Langkah | Hasil | Poin |", "|---|---|---|"]
+    for kunci in POIN:
+        st_ = status_langkah(kunci)
+        if st_ is None:
+            hasil, poin = "⏭️ belum dikerjakan", 0
+        else:
+            ok, n = st_
+            hasil = "✅ benar semua" if ok == n else (
+                f"⚠️ {ok} dari {n} bagian benar" if ok else "❌ belum tepat")
+            poin = rekam[kunci]["poin"]
+        baris.append(f"| {LABEL_TAHAP[kunci]} | {hasil} | {poin} / {POIN[kunci]} |")
+    st.markdown("\n".join(baris))
+
+    ada_salah = False
+    for kunci in POIN:
+        r = rekam.get(kunci)
+        if not r:
+            continue
+        salah = [d for d in r["items"] if not d["ok"]]
+        if not salah:
+            continue
+        ada_salah = True
+        with st.expander(
+            f"❌ {LABEL_TAHAP[kunci]} — {len(salah)} bagian perlu diperbaiki",
+            expanded=True,
+        ):
+            for d in salah:
+                st.markdown(f"**{d['label']}**")
+                st.markdown(
+                    f"- Jawabanmu: `{d['jawab']}`\n"
+                    f"- Jawaban yang benar: `{d['benar']}`\n"
+                    f"- 💡 **Letak kesalahan:** {d['catatan']}"
+                )
+    if not ada_salah:
+        st.success("🎉 Semua jawabanmu benar. Pertahankan caramu bernalar!")
+    return ada_salah
 
 
 def reset_misi():
@@ -394,18 +575,21 @@ def reset_misi():
                   "hint_kursi", "hint_tabung", "hint_sn"):
         st.session_state[kunci] = False
     st.session_state.skor_misi = 0
-    st.session_state.bukti_n = None
+    st.session_state.rekam = {}
     st.session_state.uji = None
     st.session_state.konteks = None
     st.session_state.misi_dihitung = False
+    st.session_state.refleksi = ""
+    st.session_state.perbaikan = ""
+    st.session_state.refleksi_selesai = False
     for kunci in ("in_a", "in_b", "in_koef", "in_konst", "in_n", "in_suku",
                   "in_uji_a", "in_uji_b"):
         st.session_state.pop(kunci, None)
     for kasus in ("kursi", "tabung"):
-        for item in ("a", "b", "koef", "konst", "un", "n"):
-            st.session_state.pop(f"in_{kasus}_{item}", None)
-    for item in ("p", "q", "s6", "un", "sn", "tc"):
-        st.session_state.pop(f"in_sn_{item}", None)
+        for butir in ("a", "b", "koef", "konst", "un", "n"):
+            st.session_state.pop(f"in_{kasus}_{butir}", None)
+    for butir in ("p", "q", "s6", "un", "sn", "tc"):
+        st.session_state.pop(f"in_sn_{butir}", None)
 
 
 def tombol_petunjuk(flag_hint, flag_jawab, label="💡 Minta Petunjuk"):
@@ -523,16 +707,16 @@ def svg_tabungan(a, b):
 def halaman_masalah(kunci, tag, judul, svg, cerita, c, fmt, tanya_un,
                     tanya_n, sebelum, sesudah, step=1,
                     label_lanjut="➡️ Langkah Berikutnya", aksi_lanjut=None):
-    """Satu halaman soal cerita barisan aritmatika (dipakai kursi & tabungan).
+    """Satu halaman soal cerita barisan aritmatika (kursi & tabungan).
 
     c = {"a", "b", "n_tanya", "n_cari"}; fmt = fungsi penampil nilai.
+    Jawaban dikirim apa adanya; pembahasan benar-salah ada di Refleksi.
     """
     flag = f"jawab_{kunci}"
     a_, b_ = c["a"], c["b"]
     k_ = a_ - b_
     n_tanya, n_cari = c["n_tanya"], c["n_cari"]
     un_tanya = a_ + (n_tanya - 1) * b_
-    nilai_cari = a_ + (n_cari - 1) * b_
     batas = 100_000_000
 
     judul_langkah(tag, judul)
@@ -543,49 +727,36 @@ def halaman_masalah(kunci, tag, judul, svg, cerita, c, fmt, tanya_un,
 
     st.markdown("**1. Kenali polanya**")
     k1, k2 = st.columns(2)
-    ia = k1.number_input("Suku pertama (a):", -batas, batas, 0, step, key=f"in_{kunci}_a")
-    ib = k2.number_input("Beda (b):", -batas, batas, 0, step, key=f"in_{kunci}_b")
+    ia = k1.number_input("Suku pertama (a):", -batas, batas, awal(flag, "a"), step, key=f"in_{kunci}_a")
+    ib = k2.number_input("Beda (b):", -batas, batas, awal(flag, "b"), step, key=f"in_{kunci}_b")
 
     st.markdown("**2. Susun rumus** dalam bentuk $U_n = bn + k$")
     k3, k4 = st.columns(2)
-    ik = k3.number_input("Koefisien n (b):", -batas, batas, 0, step, key=f"in_{kunci}_koef")
-    ikon = k4.number_input("Konstanta (k):", -batas, batas, 0, step, key=f"in_{kunci}_konst")
+    ik = k3.number_input("Koefisien n (b):", -batas, batas, awal(flag, "koef"), step, key=f"in_{kunci}_koef")
+    ikon = k4.number_input("Konstanta (k):", -batas, batas, awal(flag, "konst"), step, key=f"in_{kunci}_konst")
 
     st.markdown(f"**3.** {tanya_un}")
-    iun = st.number_input("Jawabanmu:", -batas, batas, 0, step, key=f"in_{kunci}_un")
+    iun = st.number_input("Jawabanmu:", -batas, batas, awal(flag, "un"), step, key=f"in_{kunci}_un")
 
     st.markdown(f"**4.** {tanya_n}")
-    iN = st.number_input("Nilai n:", 0, 1000, 0, 1, key=f"in_{kunci}_n")
+    iN = st.number_input("Nilai n:", 0, 1000, awal(flag, "n"), 1, key=f"in_{kunci}_n")
 
-    if st.button("🔎 Periksa Jawaban", use_container_width=True, key=f"cek_{kunci}"):
-        cek = {
-            "suku pertama (a)": ia == a_,
-            "beda (b)": ib == b_,
-            "koefisien n": ik == b_,
-            "konstanta": ikon == k_,
-            "jawaban nomor 3": iun == un_tanya,
-            "jawaban nomor 4": iN == n_cari,
-        }
-        salah = [nama for nama, ok in cek.items() if not ok]
-        if not salah:
-            beri_skor(flag)
-        else:
-            st.error(
-                "❌ Masih ada yang belum tepat: " + ", ".join(salah)
-                + ". Baca ceritanya sekali lagi."
-            )
-
-    if st.session_state[flag]:
-        st.success("🎉 Hebat! Semua jawabanmu benar.")
-        st.markdown("**Pembahasan**")
-        st.latex(f"U_n = {a_} + (n-1)({b_})")
-        st.latex(rumus_latex(a_, b_))
-        st.latex(f"U_{{{n_tanya}}} = {b_}({n_tanya}) + ({k_}) = {un_tanya}")
-        st.latex(rf"n = \frac{{{nilai_cari - k_}}}{{{b_}}} = {n_cari}")
-        st.info(
-            f"Jadi, pada urutan ke-{n_tanya} nilainya {fmt(un_tanya)}, "
-            f"dan {fmt(nilai_cari)} berada pada urutan ke-{n_cari}."
+    if st.button("📨 Kirim Jawaban", use_container_width=True, key=f"kirim_{kunci}"):
+        catat(
+            flag,
+            [
+                item("1a. Suku pertama (a)", ia, a_, ia == a_, cat_a(ia, a_, b_, fmt), fmt),
+                item("1b. Beda (b)", ib, b_, ib == b_, cat_b(ib, a_, b_, fmt), fmt),
+                item("2a. Koefisien n pada rumus", ik, b_, ik == b_, cat_koef(ik, a_, b_, fmt), fmt),
+                item("2b. Konstanta pada rumus", ikon, k_, ikon == k_, cat_konst(ikon, a_, b_, fmt), fmt),
+                item(f"3. {tanya_un}", iun, un_tanya, iun == un_tanya,
+                     cat_un(iun, a_, b_, n_tanya, fmt), fmt),
+                item(f"4. {tanya_n}", iN, n_cari, iN == n_cari, cat_n(iN, a_, b_, n_cari, fmt)),
+            ],
+            {"a": ia, "b": ib, "koef": ik, "konst": ikon, "un": iun, "n": iN},
         )
+
+    info_terkirim(flag)
 
     tombol_petunjuk(f"hint_{kunci}", flag)
     if st.session_state[f"hint_{kunci}"] and not st.session_state[flag]:
@@ -661,31 +832,52 @@ def putar_backsound():
 
 
 def buat_lkpd_html():
-    """Lembar hasil LKPD yang bisa dicetak / disimpan sebagai PDF dari browser."""
+    """Lembar hasil LKPD (cetak / simpan PDF dari browser)."""
     s = st.session_state
     e = html.escape
     d = SOAL[s.soal_index]
     a_, b_ = d["a"], d["b"]
-    uji = s.uji or {}
-    baris_tahap = "".join(
-        f"<tr><td>{e(LABEL_TAHAP[k])}</td><td>{'✅ Benar' if s[k] else '❌ Belum'}</td>"
-        f"<td>{POIN[k] if s[k] else 0} / {POIN[k]}</td></tr>"
-        for k in POIN
-    )
+
+    baris, detail = "", ""
+    for kunci in POIN:
+        st_ = status_langkah(kunci)
+        if st_ is None:
+            hasil, poin = "Belum dikerjakan", 0
+        else:
+            ok, n = st_
+            hasil = "✅ Benar semua" if ok == n else f"{'⚠️' if ok else '❌'} {ok} dari {n} bagian benar"
+            poin = s.rekam[kunci]["poin"]
+        baris += (f"<tr><td>{e(LABEL_TAHAP[kunci])}</td><td>{hasil}</td>"
+                  f"<td>{poin} / {POIN[kunci]}</td></tr>")
+        if st_ is not None:
+            for it in s.rekam[kunci]["items"]:
+                if not it["ok"]:
+                    detail += (
+                        f"<div class='salah'><b>{e(LABEL_TAHAP[kunci])}</b><br>"
+                        f"<b>{e(it['label'])}</b><br>"
+                        f"Jawabanmu: <code>{e(it['jawab'])}</code> &nbsp;|&nbsp; "
+                        f"Jawaban benar: <code>{e(it['benar'])}</code><br>"
+                        f"💡 {e(it['catatan'])}</div>"
+                    )
+    if not detail:
+        detail = "<p>🎉 Semua jawaban benar.</p>"
+
     refleksi = e(s.refleksi).replace("\n", "<br>") or "<i>(belum diisi)</i>"
+    perbaikan = e(s.perbaikan).replace("\n", "<br>") or "<i>(belum diisi)</i>"
     return f"""<!DOCTYPE html>
 <html lang="id"><head><meta charset="utf-8"><title>LKPD Math Detective - {e(s.nama)}</title>
 <style>
-body {{ font-family: Arial, sans-serif; max-width: 760px; margin: 30px auto; color: #0f172a; }}
+body {{ font-family: Arial, sans-serif; max-width: 780px; margin: 30px auto; color: #0f172a; }}
 h1 {{ color: #4c1d95; margin-bottom: 0; }}
 h2 {{ color: #1e3a8a; border-bottom: 2px solid #c7d2fe; padding-bottom: 4px; }}
 table {{ border-collapse: collapse; width: 100%; }}
 td, th {{ border: 1px solid #94a3b8; padding: 8px; text-align: left; }}
 th {{ background: #e0e7ff; }}
 .kotak {{ background: #eef2ff; padding: 12px 16px; border-radius: 10px; font-size: 20px; }}
+.salah {{ background: #fef2f2; border-left: 5px solid #ef4444; padding: 10px 14px; margin: 10px 0; border-radius: 8px; }}
 </style></head><body>
 <h1>🔎 LKPD Math Detective</h1>
-<p>Menemukan Rumus Suku ke-n Barisan Aritmatika</p>
+<p>Menemukan Rumus Suku ke-n dan Jumlah n Suku Pertama Barisan Aritmatika</p>
 <table>
 <tr><th>Nama</th><td>{e(s.nama)}</td><th>Kelas</th><td>{e(s.kelas)}</td></tr>
 <tr><th>Tanggal</th><td>{datetime.now().strftime('%d-%m-%Y %H:%M')}</td><th>Barisan</th><td>{e(d['nama'])}</td></tr>
@@ -693,16 +885,16 @@ th {{ background: #e0e7ff; }}
 <h2>Barisan yang diselidiki</h2>
 <div class="kotak">{', '.join(map(str, buat_barisan(a_, b_)))}, ...</div>
 <p>Suku pertama (a) = <b>{a_}</b> &nbsp;|&nbsp; Beda (b) = <b>{b_}</b></p>
-<h2>Rumus yang ditemukan</h2>
-<div class="kotak">Uₙ = a + (n − 1)b = {a_} + (n − 1)({b_})<br><b>{e(rumus_teks(a_, b_))}</b></div>
-<h2>Penalaran kritis</h2>
-<p>Suku ke berapakah {uji.get('N1', '-')}? Jawaban benar: n = {uji.get('n', '-')}.<br>
-Apakah {uji.get('N2', '-')} suku barisan? Jawaban benar: tidak, karena n bukan bilangan bulat.</p>
-<h2>Rekap skor</h2>
-<table><tr><th>Tahap</th><th>Status</th><th>Poin</th></tr>{baris_tahap}
+<div class="kotak">Uₙ = a + (n − 1)b → <b>{e(rumus_teks(a_, b_))}</b></div>
+<h2>Rekap hasil</h2>
+<table><tr><th>Langkah</th><th>Hasil</th><th>Poin</th></tr>{baris}
 <tr><th>Total misi</th><th></th><th>{s.skor_misi} / {SKOR_MAKS_MISI}</th></tr></table>
+<h2>Pembahasan: letak kesalahan</h2>
+{detail}
 <h2>Refleksi</h2>
 <p>{refleksi}</p>
+<h2>Rencana perbaikan</h2>
+<p>{perbaikan}</p>
 </body></html>""".encode("utf-8")
 
 
@@ -714,7 +906,8 @@ DEFAULTS = {
     "jawab_kursi": False, "jawab_tabung": False, "jawab_sn": False,
     "hint_a": False, "hint_b": False, "hint_rumus": False, "hint_uji": False,
     "hint_kursi": False, "hint_tabung": False, "hint_sn": False,
-    "bukti_n": None, "uji": None, "konteks": None, "refleksi": "",
+    "uji": None, "konteks": None, "rekam": {},
+    "refleksi": "", "perbaikan": "", "refleksi_selesai": False,
 }
 for kunci, nilai in DEFAULTS.items():
     st.session_state.setdefault(kunci, nilai)
@@ -757,8 +950,10 @@ with st.sidebar:
     if st.session_state.kelas:
         st.write(f"🏫 **{st.session_state.kelas}**")
     st.markdown("---")
-    st.metric("⭐ Skor Total", st.session_state.skor_total)
+    terkirim = sum(1 for k in POIN if st.session_state[k])
+    st.metric("📨 Jawaban Terkirim", f"{terkirim} / {len(POIN)}")
     st.metric("🎯 Misi Selesai", st.session_state.misi_selesai)
+    st.caption("Skor dan pembahasan kesalahan muncul di bagian Refleksi pada akhir LKPD.")
     st.markdown("---")
     st.write("### 🗂️ Tahapan LKPD")
     tahap = [
@@ -856,10 +1051,13 @@ elif halaman == 2:
     st.subheader("📋 Petunjuk Pengerjaan")
     kartu(
         "1. Kerjakan <b>satu langkah per halaman</b>, berurutan dari Langkah 1 sampai 8.<br>"
-        "2. Tekan <b>Periksa</b> untuk mengecek jawabanmu.<br>"
-        "3. Gunakan <b>Minta Petunjuk</b> jika kesulitan.<br>"
-        "4. Langkah berikutnya terbuka setelah jawabanmu benar.<br>"
-        f"5. Skor maksimal tiap misi: <b>{SKOR_MAKS_MISI} poin</b>."
+        "2. Tekan <b>Kirim Jawaban</b>. Jawabanmu tersimpan, benar maupun salah, "
+        "dan kamu boleh lanjut ke langkah berikutnya.<br>"
+        "3. Kamu boleh mengubah jawaban sebelum lanjut, lalu kirim lagi.<br>"
+        "4. Gunakan <b>Minta Petunjuk</b> jika kesulitan.<br>"
+        "5. <b>Benar atau salahnya dibahas di bagian Refleksi</b> pada akhir LKPD: "
+        "kamu akan diberi tahu di mana letak kesalahanmu.<br>"
+        f"6. Skor maksimal tiap misi: <b>{SKOR_MAKS_MISI} poin</b>."
     )
 
     st.markdown("**Barisan kasusmu:**")
@@ -889,17 +1087,17 @@ elif halaman == 3:
 
     jawaban = st.number_input(
         "Masukkan nilai a:", min_value=-1000, max_value=1000,
-        value=0, step=1, key="in_a",
+        value=awal("jawab_a", "a"), step=1, key="in_a",
     )
 
-    if st.button("🔎 Periksa Jawaban", use_container_width=True, key="cek_a"):
-        if jawaban == a:
-            beri_skor("jawab_a")
-        else:
-            st.error("❌ Belum tepat. Perhatikan angka pertama pada barisan.")
+    if st.button("📨 Kirim Jawaban", use_container_width=True, key="kirim_a"):
+        catat(
+            "jawab_a",
+            [item("Suku pertama (a)", jawaban, a, jawaban == a, cat_a(jawaban, a, b))],
+            {"a": jawaban},
+        )
 
-    if st.session_state.jawab_a:
-        st.success(f"🎉 Benar! Suku pertama adalah a = {a}.")
+    info_terkirim("jawab_a")
 
     tombol_petunjuk("hint_a", "jawab_a")
     if st.session_state.hint_a and not st.session_state.jawab_a:
@@ -914,7 +1112,7 @@ elif halaman == 3:
 elif halaman == 4:
     judul_langkah("LANGKAH 2 DARI 8", "🟩 Menentukan Beda (b)")
 
-    tampil_svg(svg_loncatan(barisan, b if st.session_state.jawab_b else None))
+    tampil_svg(svg_loncatan(barisan, None))
 
     st.write(
         "Perhatikan 'loncatan' dari satu suku ke suku berikutnya. "
@@ -924,19 +1122,17 @@ elif halaman == 4:
 
     jawaban = st.number_input(
         "Masukkan nilai beda b:", min_value=-1000, max_value=1000,
-        value=0, step=1, key="in_b",
+        value=awal("jawab_b", "b"), step=1, key="in_b",
     )
 
-    if st.button("🔎 Periksa Beda", use_container_width=True, key="cek_b"):
-        if jawaban == b:
-            beri_skor("jawab_b")
-            st.rerun()  # agar ilustrasi menampilkan nilai beda
-        else:
-            st.error("❌ Belum tepat. Hitung selisih antara dua suku berurutan.")
+    if st.button("📨 Kirim Jawaban", use_container_width=True, key="kirim_b"):
+        catat(
+            "jawab_b",
+            [item("Beda (b)", jawaban, b, jawaban == b, cat_b(jawaban, a, b))],
+            {"b": jawaban},
+        )
 
-    if st.session_state.jawab_b:
-        st.success(f"🎉 Benar! Beda barisan adalah b = {b}.")
-        st.info(f"Kita memperoleh:  **a = {a}**  dan  **b = {b}**")
+    info_terkirim("jawab_b")
 
     tombol_petunjuk("hint_b", "jawab_b")
     if st.session_state.hint_b and not st.session_state.jawab_b:
@@ -953,14 +1149,15 @@ elif halaman == 5:
 
     tampil_svg(svg_mesin("a + (n−1)b"))
 
+    a_s, b_s = ab_siswa()
     kol1, kol2 = st.columns(2)
-    kol1.metric("Suku pertama (a)", a)
-    kol2.metric("Beda (b)", b)
+    kol1.metric("a yang kamu kirim", a_s)
+    kol2.metric("b yang kamu kirim", b_s)
 
     st.write("Rumus umum barisan aritmatika:")
     st.latex("U_n = a + (n-1)b")
-    st.write(f"Substitusikan $a = {a}$ dan $b = {b}$:")
-    st.latex(f"U_n = {a} + (n-1)({b})")
+    st.write(f"Substitusikan nilai $a = {a_s}$ dan $b = {b_s}$ yang kamu temukan:")
+    st.latex(f"U_n = {a_s} + (n-1)({b_s})")
     st.write("Sekarang sederhanakan bentuk tersebut.")
 
     st.markdown("### ✏️ Masukkan hasil penyederhanaan")
@@ -968,31 +1165,42 @@ elif halaman == 5:
     with kol1:
         koefisien = st.number_input(
             "Koefisien n:", min_value=-1000, max_value=1000,
-            value=0, step=1, key="in_koef",
+            value=awal("jawab_rumus", "koef"), step=1, key="in_koef",
         )
     with kol2:
         konstanta_input = st.number_input(
             "Konstanta:", min_value=-1000, max_value=1000,
-            value=0, step=1, key="in_konst",
+            value=awal("jawab_rumus", "konst"), step=1, key="in_konst",
         )
     st.latex(r"U_n = (\text{koefisien})\,n + \text{konstanta}")
 
-    if st.button("🔎 Periksa Rumus", use_container_width=True, key="cek_rumus"):
-        if koefisien == b and konstanta_input == konstanta:
-            beri_skor("jawab_rumus")
-        else:
-            st.error("❌ Rumus belum tepat. Coba sederhanakan kembali.")
+    if st.button("📨 Kirim Jawaban", use_container_width=True, key="kirim_rumus"):
+        c_koef = cat_koef(koefisien, a, b)
+        c_konst = cat_konst(konstanta_input, a, b)
+        konsisten = koefisien == b_s and konstanta_input == a_s - b_s
+        if konsisten and not (koefisien == b and konstanta_input == konstanta):
+            tambah = (" Rumusmu sudah konsisten dengan a dan b yang kamu kirim di "
+                      "Langkah 1 dan 2, jadi kesalahan berasal dari nilai a atau b tersebut.")
+            if koefisien != b:
+                c_koef += tambah
+            if konstanta_input != konstanta:
+                c_konst += tambah
+        catat(
+            "jawab_rumus",
+            [
+                item("Koefisien n", koefisien, b, koefisien == b, c_koef),
+                item("Konstanta", konstanta_input, konstanta,
+                     konstanta_input == konstanta, c_konst),
+            ],
+            {"koef": koefisien, "konst": konstanta_input},
+        )
 
-    if st.session_state.jawab_rumus:
-        st.success("🎉 Luar biasa! Kamu berhasil menemukan rumus.")
-        st.markdown("### 🔐 Rumus yang kamu temukan:")
-        st.latex(rumus_latex(a, b))
-        tampil_svg(svg_mesin(rumus_ruas_kanan(a, b)), maks=640)
+    info_terkirim("jawab_rumus")
 
     tombol_petunjuk("hint_rumus", "jawab_rumus", "💡 Minta Petunjuk Rumus")
     if st.session_state.hint_rumus and not st.session_state.jawab_rumus:
         st.info(
-            f"Gunakan $U_n = {a} + (n-1)({b})$. "
+            f"Gunakan $U_n = {a_s} + (n-1)({b_s})$. "
             "Kembangkan tanda kurung, lalu gabungkan suku yang sejenis."
         )
 
@@ -1007,37 +1215,37 @@ elif halaman == 6:
 
     tampil_svg(svg_grafik(a, b))
 
-    st.success("Rumus yang berhasil kamu temukan:")
-    st.latex(rumus_latex(a, b))
+    k1, k0 = rumus_siswa()
+    st.write("Rumus yang kamu susun pada Langkah 3:")
+    st.latex(rumus_latex(k1 + k0, k1))
 
     st.write(
-        "Sekarang buktikan bahwa rumusmu benar. "
+        "Sekarang gunakan rumusmu. "
         "Pilih sebuah nilai $n$, kemudian tentukan nilai $U_n$."
     )
 
     n = st.number_input(
         "Tentukan nilai n:", min_value=1, max_value=100,
-        value=10, step=1, key="in_n",
+        value=max(1, awal("jawab_suku", "n", 10)), step=1, key="in_n",
     )
     jawaban = st.number_input(
         f"Berapa nilai suku ke-{n}?", min_value=-10000, max_value=10000,
-        value=0, step=1, key="in_suku",
+        value=awal("jawab_suku", "un"), step=1, key="in_suku",
     )
 
-    if st.button("🚀 Periksa Hasil", use_container_width=True, key="cek_suku"):
-        if jawaban == b * n + konstanta:
-            beri_skor("jawab_suku")
-            st.session_state.bukti_n = int(n)
-        else:
-            st.error("❌ Belum tepat. Masukkan nilai n ke dalam rumus.")
+    if st.button("📨 Kirim Jawaban", use_container_width=True, key="kirim_suku"):
+        hasil_benar = b * n + konstanta
+        c_un = cat_un(jawaban, a, b, n)
+        if jawaban != hasil_benar and jawaban == k1 * n + k0:
+            c_un += (" Hitunganmu sudah sesuai rumus yang kamu susun pada "
+                     "Langkah 3, tetapi rumus itu sendiri belum tepat.")
+        catat(
+            "jawab_suku",
+            [item(f"Nilai suku ke-{n}", jawaban, hasil_benar, jawaban == hasil_benar, c_un)],
+            {"n": int(n), "un": jawaban},
+        )
 
-    if st.session_state.jawab_suku and st.session_state.bukti_n is not None:
-        nb = st.session_state.bukti_n
-        hasil = b * nb + konstanta
-        st.success(f"🎉 Benar! Suku ke-{nb} adalah {hasil}.")
-        st.markdown("### 🧮 Pembuktian")
-        st.latex(f"U_{{{nb}}} = {b}({nb}) + ({konstanta})")
-        st.latex(f"U_{{{nb}}} = {hasil}")
+    info_terkirim("jawab_suku")
 
     navigasi(5, 7, st.session_state.jawab_suku)
 
@@ -1057,50 +1265,57 @@ elif halaman == 7:
 
     tampil_svg(svg_lup(u["N1"], u["N2"]))
 
-    st.write("Rumus barisanmu:")
-    st.latex(rumus_latex(a, b))
+    k1, k0 = rumus_siswa()
+    st.write("Rumus yang kamu susun pada Langkah 3:")
+    st.latex(rumus_latex(k1 + k0, k1))
 
     st.markdown(f"**A.** Suku ke berapakah bilangan **{u['N1']}**?")
     jawab_a_uji = st.number_input(
-        "Nilai n:", min_value=1, max_value=1000, value=1, step=1, key="in_uji_a",
+        "Nilai n:", min_value=1, max_value=1000,
+        value=max(1, awal("jawab_uji", "a", 1)), step=1, key="in_uji_a",
     )
 
     st.markdown(f"**B.** Apakah bilangan **{u['N2']}** termasuk suku barisan ini?")
+    opsi = ["— pilih —", "Ya, termasuk suku barisan", "Tidak termasuk suku barisan"]
     pilihan_b = st.selectbox(
-        "Pilih jawabanmu:",
-        ["— pilih —", "Ya, termasuk suku barisan", "Tidak termasuk suku barisan"],
+        "Pilih jawabanmu:", opsi,
+        index=opsi.index(awal("jawab_uji", "b", "— pilih —")),
         key="in_uji_b",
     )
 
-    if st.button("🔎 Periksa Jawaban", use_container_width=True, key="cek_uji"):
-        benar_a = jawab_a_uji == u["n"]
-        benar_b = pilihan_b == "Tidak termasuk suku barisan"
-        if benar_a and benar_b:
-            beri_skor("jawab_uji")
-        else:
-            if not benar_a:
-                st.error("❌ Soal A belum tepat. Selesaikan persamaan $U_n$ = bilangan tersebut.")
-            if not benar_b:
-                st.error("❌ Soal B belum tepat. Coba cari $n$ dan lihat apakah bilangan bulat.")
+    if st.button("📨 Kirim Jawaban", use_container_width=True, key="kirim_uji"):
+        c_a = cat_n(jawab_a_uji, a, b, u["n"])
+        if (jawab_a_uji != u["n"] and k1 != 0 and (u["N1"] - k0) % k1 == 0
+                and (u["N1"] - k0) // k1 == jawab_a_uji):
+            c_a += (" Hitunganmu sesuai rumus yang kamu susun pada Langkah 3, "
+                    "tetapi rumus itu sendiri belum tepat.")
+        n_pecah = (u["N2"] - konstanta) / b
+        c_b = ""
+        if pilihan_b == "— pilih —":
+            c_b = "Kamu belum memilih jawaban. "
+        elif pilihan_b.startswith("Ya"):
+            c_b = "Kamu menjawab Ya, padahal bilangan itu bukan suku barisan. "
+        c_b += (f"Hitung n = ({u['N2']} − ({konstanta})) ÷ {b} = {n_pecah:.2f}. "
+                f"Karena n bukan bilangan bulat, {u['N2']} bukan suku barisan.")
+        benar_b = "Tidak termasuk suku barisan"
+        catat(
+            "jawab_uji",
+            [
+                item(f"A. Suku ke berapa {u['N1']}?", jawab_a_uji, u["n"],
+                     jawab_a_uji == u["n"], c_a),
+                item(f"B. Apakah {u['N2']} suku barisan?", pilihan_b, benar_b,
+                     pilihan_b == benar_b, c_b),
+            ],
+            {"a": jawab_a_uji, "b": pilihan_b},
+        )
 
-    if st.session_state.jawab_uji:
-        st.success("🎉 Hebat! Penalaranmu tepat.")
-        st.markdown("**Pembahasan A**")
-        st.latex(f"{b}n + ({konstanta}) = {u['N1']}")
-        st.latex(rf"n = \frac{{{u['N1'] - konstanta}}}{{{b}}} = {u['n']}")
-        st.markdown("**Pembahasan B**")
-        st.latex(
-            rf"n = \frac{{{u['N2'] - konstanta}}}{{{b}}} = {(u['N2'] - konstanta) / b:.2f}"
-        )
-        st.write(
-            f"Karena $n$ bukan bilangan bulat, {u['N2']} **bukan** suku barisan ini."
-        )
+    info_terkirim("jawab_uji")
 
     tombol_petunjuk("hint_uji", "jawab_uji")
     if st.session_state.hint_uji and not st.session_state.jawab_uji:
         st.info(
-            f"Petunjuk: tulis $U_n = {u['N1']}$ sehingga ${b}n + ({konstanta}) = {u['N1']}$, "
-            "lalu cari $n$. Nomor suku harus bilangan bulat positif."
+            f"Petunjuk: tulis $U_n = {u['N1']}$ sehingga rumusmu sama dengan "
+            f"{u['N1']}, lalu cari $n$. Nomor suku harus bilangan bulat positif."
         )
 
     navigasi(6, 8, st.session_state.jawab_uji)
@@ -1197,13 +1412,13 @@ elif halaman == 10:
     )
 
     st.markdown("**1.** Berapa $U_1 + U_6$ (dalam rupiah)?")
-    ip = st.number_input("Jawabanmu:", -batas, batas, 0, 500, key="in_sn_p")
+    ip = st.number_input("Jawabanmu:", -batas, batas, awal("jawab_sn", "p"), 500, key="in_sn_p")
 
     st.markdown("**2.** Ada berapa pasangan yang terbentuk dari 6 minggu?")
-    iq = st.number_input("Banyak pasangan:", 0, 100, 0, 1, key="in_sn_q")
+    iq = st.number_input("Banyak pasangan:", 0, 100, awal("jawab_sn", "q"), 1, key="in_sn_q")
 
     st.markdown("**3.** Berapa total tabungan 6 minggu pertama ($S_6$)?")
-    is6 = st.number_input("Jawabanmu:", -batas, batas, 0, 500, key="in_sn_s6")
+    is6 = st.number_input("Jawabanmu:", -batas, batas, awal("jawab_sn", "s6"), 500, key="in_sn_s6")
 
     st.markdown("---")
     st.markdown("### 🧮 Bagian B - Terapkan pada target Dina")
@@ -1213,47 +1428,68 @@ elif halaman == 10:
     )
 
     st.markdown(f"**4.** Berapa rupiah yang Dina tabung pada minggu ke-{n_s} ($U_{{{n_s}}}$)?")
-    iun = st.number_input("Jawabanmu:", -batas, batas, 0, 500, key="in_sn_un")
+    iun = st.number_input("Jawabanmu:", -batas, batas, awal("jawab_sn", "un"), 500, key="in_sn_un")
 
     st.markdown(f"**5.** Berapa total tabungan selama {n_s} minggu ($S_{{{n_s}}}$)?")
-    isn = st.number_input("Jawabanmu:", -batas, batas, 0, 500, key="in_sn_sn")
+    isn = st.number_input("Jawabanmu:", -batas, batas, awal("jawab_sn", "sn"), 500, key="in_sn_sn")
 
     st.markdown("**6.** Apakah target Dina tercapai?")
+    opsi_tc = ["— pilih —", "Ya, target tercapai", "Tidak, target belum tercapai"]
     ipil = st.selectbox(
-        "Pilih kesimpulanmu:",
-        ["— pilih —", "Ya, target tercapai", "Tidak, target belum tercapai"],
+        "Pilih kesimpulanmu:", opsi_tc,
+        index=opsi_tc.index(awal("jawab_sn", "tc", "— pilih —")),
         key="in_sn_tc",
     )
 
-    if st.button("🔎 Periksa Jawaban", use_container_width=True, key="cek_sn"):
-        cek = {
-            "nomor 1 (U₁ + U₆)": ip == a_ + u6,
-            "nomor 2 (banyak pasangan)": iq == 3,
-            "nomor 3 (S₆)": is6 == 3 * (a_ + u6),
-            f"nomor 4 (U{sub(n_s)})": iun == un_s,
-            f"nomor 5 (S{sub(n_s)})": isn == sn_s,
-            "nomor 6 (kesimpulan target)": ipil == pilihan_benar,
-        }
-        salah = [nama for nama, ok in cek.items() if not ok]
-        if not salah:
-            beri_skor("jawab_sn")
+    if st.button("📨 Kirim Jawaban", use_container_width=True, key="kirim_sn"):
+        pasangan = a_ + u6
+        # nomor 1
+        c1 = f"U₁ + U₆ = {rupiah(a_)} + {rupiah(u6)} = {rupiah(pasangan)}."
+        if ip == 0:
+            c1 = "Bagian ini belum kamu isi. " + c1
+        elif ip == u6:
+            c1 = "Kamu hanya menulis U₆, belum menjumlahkannya dengan U₁. " + c1
+        # nomor 2
+        c2 = "Enam suku dipasangkan dua-dua, jadi ada 6 ÷ 2 = 3 pasangan."
+        if iq == 6:
+            c2 = "Kamu menulis banyak suku (6), bukan banyak pasangan. " + c2
+        # nomor 3
+        c3 = (f"S₆ = banyak pasangan × jumlah satu pasangan = 3 × {rupiah(pasangan)} "
+              f"= {rupiah(3 * pasangan)}.")
+        if is6 == pasangan:
+            c3 = "Kamu baru menghitung satu pasangan. " + c3
+        # nomor 5
+        c5 = (f"S{sub(n_s)} = n/2 × (a + U{sub(n_s)}) = {n_s}/2 × ({a_} + {un_s}) "
+              f"= {rupiah(sn_s)}.")
+        if isn == n_s * (a_ + un_s):
+            c5 = "Kamu lupa membagi dua (÷ 2) pada rumus Sₙ. " + c5
+        elif isn == un_s:
+            c5 = "Kamu menulis suku terakhir, bukan jumlah seluruh suku. " + c5
+        # nomor 6
+        if ipil == "— pilih —":
+            c6 = "Kamu belum memilih jawaban. "
+        elif ipil != pilihan_benar:
+            c6 = "Kesimpulanmu terbalik. "
         else:
-            st.error("❌ Masih ada yang belum tepat: " + ", ".join(salah) + ".")
-
-    if st.session_state.jawab_sn:
-        st.success("🎉 Luar biasa! Kamu menemukan cara menghitung total tabungan.")
-        st.markdown("**Pembahasan**")
-        st.latex(rf"S_6 = 3 \times (U_1 + U_6) = 3 \times {a_ + u6} = {3 * (a_ + u6)}")
-        st.markdown("Trik pasangan ini menghasilkan **rumus jumlah n suku pertama**:")
-        st.latex(r"S_n = \frac{n}{2}\,(a + U_n)")
-        st.latex(r"S_n = \frac{n}{2}\,\big(2a + (n-1)b\big)")
-        st.latex(rf"U_{{{n_s}}} = {a_} + ({n_s}-1)({b_}) = {un_s}")
-        st.latex(rf"S_{{{n_s}}} = \frac{{{n_s}}}{{2}}\,({a_} + {un_s}) = {sn_s}")
-        st.info(
-            f"Total tabungan {n_s} minggu: {rupiah(sn_s)}. "
-            f"Target {rupiah(target)} "
-            + ("sudah tercapai." if tercapai else "belum tercapai.")
+            c6 = ""
+        c6 += (f"Bandingkan S{sub(n_s)} = {rupiah(sn_s)} dengan target {rupiah(target)}: "
+               + ("total tabungan lebih dari atau sama dengan target, jadi tercapai."
+                  if tercapai else "total tabungan kurang dari target, jadi belum tercapai."))
+        catat(
+            "jawab_sn",
+            [
+                item("1. U₁ + U₆", ip, pasangan, ip == pasangan, c1, rupiah),
+                item("2. Banyak pasangan", iq, 3, iq == 3, c2),
+                item("3. S₆", is6, 3 * pasangan, is6 == 3 * pasangan, c3, rupiah),
+                item(f"4. U{sub(n_s)}", iun, un_s, iun == un_s,
+                     cat_un(iun, a_, b_, n_s, rupiah), rupiah),
+                item(f"5. S{sub(n_s)}", isn, sn_s, isn == sn_s, c5, rupiah),
+                item("6. Kesimpulan target", ipil, pilihan_benar, ipil == pilihan_benar, c6),
+            ],
+            {"p": ip, "q": iq, "s6": is6, "un": iun, "sn": isn, "tc": ipil},
         )
+
+    info_terkirim("jawab_sn")
 
     tombol_petunjuk("hint_sn", "jawab_sn")
     if st.session_state.hint_sn and not st.session_state.jawab_sn:
@@ -1268,7 +1504,7 @@ elif halaman == 10:
              label_lanjut="🏆 Lihat Hasil", aksi_lanjut=_hitung_misi)
 
 # =========================================================
-# HALAMAN 11 - HASIL, KESIMPULAN & REFLEKSI
+# HALAMAN 11 - HASIL, REFLEKSI & PEMBAHASAN KESALAHAN
 # =========================================================
 
 elif halaman == 11:
@@ -1276,63 +1512,84 @@ elif halaman == 11:
 
     st.success(
         f"Selamat, Detektif {st.session_state.nama}! "
-        "Kamu telah memecahkan seluruh tahapan kasus barisan aritmatika."
+        "Kamu sudah mengirimkan seluruh jawaban dan menyelesaikan semua tahapan."
     )
-
-    st.subheader("📊 Hasil Belajar")
-    kol1, kol2, kol3 = st.columns(3)
-    kol1.metric("⭐ Skor Misi", f"{st.session_state.skor_misi} / {SKOR_MAKS_MISI}")
-    kol2.metric("🏅 Skor Total", st.session_state.skor_total)
-    kol3.metric("🎯 Misi Selesai", st.session_state.misi_selesai)
-
-    with st.expander("Lihat rincian tiap langkah"):
-        for k in POIN:
-            tanda = "✅" if st.session_state[k] else "❌"
-            st.write(f"{tanda} {LABEL_TAHAP[k]} — {POIN[k] if st.session_state[k] else 0}/{POIN[k]}")
-
-    st.markdown("---")
-    st.subheader("🧠 Rumus yang Ditemukan")
-    st.latex(f"U_n = {a} + (n-1)({b})")
-    st.latex(rumus_latex(a, b))
 
     st.subheader("📚 Kesimpulan")
     st.write(
         "Rumus suku ke-n barisan aritmatika dapat ditemukan menggunakan "
-        "suku pertama dan beda:"
+        "suku pertama dan beda. Jumlah n suku pertamanya dihitung dengan "
+        "memasangkan suku dari kedua ujung."
     )
     st.latex("U_n = a + (n-1)b")
+    st.latex(r"S_n = \frac{n}{2}\,(a + U_n)")
     st.markdown(
         """
         dengan:
 
         - **a** = suku pertama
         - **b** = beda
-        - **n** = nomor suku
+        - **n** = banyak suku / nomor suku
         """
     )
 
     st.markdown("---")
     st.subheader("💭 Refleksi")
+    st.write(
+        "Tuliskan refleksimu lebih dulu. Setelah disimpan, kamu akan "
+        "melihat **pembahasan: di mana letak kesalahanmu**."
+    )
     refleksi = st.text_area(
-        "Menurutmu, bagaimana cara menemukan rumus suku ke-n?",
+        "Menurutmu, bagaimana cara menemukan rumus suku ke-n dan jumlah n suku pertama?",
         value=st.session_state.refleksi,
         height=150,
     )
-    if st.button("💾 Simpan Refleksi", use_container_width=True):
+    if st.button("💾 Simpan Refleksi & Lihat Pembahasan", use_container_width=True):
         if refleksi.strip():
             st.session_state.refleksi = refleksi.strip()
-            st.success("Refleksi berhasil disimpan!")
+            st.session_state.refleksi_selesai = True
         else:
             st.warning("Tuliskan refleksimu terlebih dahulu.")
 
-    st.download_button(
-        "📥 Unduh Lembar Hasil LKPD (HTML / cetak PDF)",
-        data=buat_lkpd_html(),
-        file_name=f"LKPD_{st.session_state.nama or 'siswa'}.html",
-        mime="text/html",
-        use_container_width=True,
-    )
-    st.caption("Buka file hasil unduhan di browser, lalu tekan Ctrl+P untuk menyimpannya sebagai PDF.")
+    if st.session_state.refleksi_selesai:
+        st.markdown("---")
+        st.subheader("🔍 Pembahasan: Di Mana Letak Kesalahanmu?")
+
+        kol1, kol2, kol3 = st.columns(3)
+        kol1.metric("⭐ Skor Misi", f"{st.session_state.skor_misi} / {SKOR_MAKS_MISI}")
+        kol2.metric("🏅 Skor Total", st.session_state.skor_total)
+        kol3.metric("🎯 Misi Selesai", st.session_state.misi_selesai)
+
+        ada_salah = tampil_pembahasan()
+
+        st.markdown("**Rumus yang benar untuk barisan kasusmu:**")
+        st.latex(f"U_n = {a} + (n-1)({b})")
+        st.latex(rumus_latex(a, b))
+
+        st.subheader("🛠️ Rencana Perbaikan")
+        perbaikan = st.text_area(
+            "Dari pembahasan di atas, bagian mana yang masih keliru dan "
+            "bagaimana kamu akan memperbaikinya?"
+            if ada_salah else
+            "Bagian mana yang menurutmu paling menantang, dan apa yang membantumu?",
+            value=st.session_state.perbaikan,
+            height=120,
+        )
+        if st.button("💾 Simpan Rencana Perbaikan", use_container_width=True):
+            if perbaikan.strip():
+                st.session_state.perbaikan = perbaikan.strip()
+                st.success("Rencana perbaikan berhasil disimpan!")
+            else:
+                st.warning("Tuliskan rencana perbaikanmu terlebih dahulu.")
+
+        st.download_button(
+            "📥 Unduh Lembar Hasil LKPD (HTML / cetak PDF)",
+            data=buat_lkpd_html(),
+            file_name=f"LKPD_{st.session_state.nama or 'siswa'}.html",
+            mime="text/html",
+            use_container_width=True,
+        )
+        st.caption("Buka file hasil unduhan di browser, lalu tekan Ctrl+P untuk menyimpannya sebagai PDF.")
 
     st.markdown("---")
     st.subheader("🔄 Misi Berikutnya")
@@ -1346,5 +1603,4 @@ elif halaman == 11:
         reset_misi()
         st.session_state.skor_total = 0
         st.session_state.misi_selesai = 0
-        st.session_state.refleksi = ""
         pindah_halaman(1)
