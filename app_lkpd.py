@@ -4,7 +4,7 @@ Menemukan Rumus Suku ke-n Barisan Aritmatika
 =================================================================
 
 Cara menjalankan:
-    pip install streamlit
+    pip install streamlit numpy
     streamlit run app_lkpd.py
 
 Struktur LKPD (1 langkah = 1 halaman):
@@ -30,7 +30,7 @@ from datetime import datetime
 import streamlit as st
 
 # =========================================================
-# KONFIGURASI HALAMAN & TEMA DETEKTIF NOIR
+# KONFIGURASI HALAMAN & TEMA DETEKTIF NOIR KLASIK
 # =========================================================
 
 st.set_page_config(
@@ -832,29 +832,17 @@ def svg_pasangan(a, b, n=6):
 </svg>"""
 
 
-@st.cache_resource
-def muat_backsound():
-    """Membaca backsound.mp3 (atau .wav) yang diletakkan sefolder dengan app_lkpd.py."""
-    folder = os.path.dirname(os.path.abspath(__file__))
-    for nama, mime in (("backsound.mp3", "audio/mpeg"), ("backsound.wav", "audio/wav"), ("jazz.mp3", "audio/mpeg")):
-        jalur = os.path.join(folder, nama)
-        if os.path.exists(jalur):
-            with open(jalur, "rb") as f:
-                return f.read(), mime
-    return None, None
-
-
 def putar_backsound():
-    """Memutar backsound audio secara otomatis via Base64 HTML5 Audio player."""
-    data, mime = muat_backsound()
-    if data is None:
-        st.caption("⚠️ File `backsound.mp3` atau `backsound.wav` belum ada di folder aplikasi.")
-        return
-    st.caption("🎷 Backsound Jazz Aktif")
-    audio_b64 = base64.b64encode(data).decode()
+    """Memutar musik jazz langsung dari URL online tanpa butuh file lokal."""
+    st.caption("🎷 Backsound Jazz Online Aktif")
+    # Link audio jazz bebas royalti
+    jazz_url = "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
+    
     audio_html = f"""
-        <audio autoplay loop hidden>
-            <source src="data:{mime};base64,{audio_b64}" type="{mime}">
+        <iframe src="{jazz_url}" allow="autoplay" id="audio" style="display:none"></iframe>
+        <audio autoplay loop controls style="width: 100%; height: 40px; margin-top: 5px;">
+            <source src="{jazz_url}" type="audio/mpeg">
+            Browser kamu tidak mendukung pemutar audio.
         </audio>
     """
     st.markdown(audio_html, unsafe_allow_html=True)
