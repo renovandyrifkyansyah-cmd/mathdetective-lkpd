@@ -1,5 +1,5 @@
 """
-🔎 MATH DETECTIVE — LKPD Interaktif Noir & Jazz Edition
+🔎 MATH DETECTIVE — LKPD Interaktif Noir & Jazz Embedded Edition
 Menemukan Rumus Suku ke-n Barisan Aritmatika
 =================================================================
 
@@ -23,10 +23,13 @@ Struktur LKPD (1 langkah = 1 halaman):
 
 import base64
 import html
+import io
 import os
 import random
+import wave
 from datetime import datetime
 
+import numpy as np
 import streamlit as st
 
 # =========================================================
@@ -122,6 +125,75 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
+# =========================================================
+# BACKSOUND JAZZ EMBEDDED GENERATOR (Sintesis Audio Internal)
+# =========================================================
+
+@st.cache_resource
+def buat_audio_jazz_embedded():
+    """Menghasilkan audio jazz secara internal (tanpa butuh file mp3/wav luar)."""
+    sample_rate = 22050
+    duration = 16.0  # 16 detik loopable
+    t = np.linspace(0, duration, int(sample_rate * duration), False)
+    
+    bpm = 80
+    beat_dur = 60.0 / bpm
+    audio = np.zeros_like(t)
+    
+    # 1. Walking Bassline (Tone Noir Jazz)
+    bass_notes = [43.65, 58.27, 49.00, 51.91, 43.65, 65.41, 61.74, 65.41]
+    for i, _ in enumerate(t):
+        current_beat = int((i / sample_rate) / beat_dur)
+        note_freq = bass_notes[current_beat % len(bass_notes)]
+        val = 0.6 * np.sin(2 * np.pi * note_freq * (i / sample_rate))
+        val += 0.2 * np.sin(2 * np.pi * note_freq * 2 * (i / sample_rate))
+        beat_pos = ((i / sample_rate) % beat_dur) / beat_dur
+        env = np.exp(-3.0 * beat_pos)
+        audio[i] += val * env * 0.4
+
+    # 2. Soft Jazz Piano Chords (Fm7, Bbm7, Eb7, Abmaj7)
+    chords = [
+        [174.61, 207.65, 261.63, 311.13],
+        [116.54, 138.59, 174.61, 207.65],
+        [155.56, 196.00, 233.08, 277.18],
+        [207.65, 261.63, 311.13, 392.00]
+    ]
+    for i, _ in enumerate(t):
+        chord_idx = int((i / sample_rate) / (beat_dur * 4)) % len(chords)
+        chord = chords[chord_idx]
+        beat_pos = ((i / sample_rate) % (beat_dur * 2)) / (beat_dur * 2)
+        if beat_pos < 0.8:
+            env = np.exp(-2.0 * beat_pos)
+            chord_val = sum(np.sin(2 * np.pi * f * (i / sample_rate)) for f in chord)
+            audio[i] += chord_val * env * 0.08
+
+    # Normalisasi
+    max_val = np.max(np.abs(audio))
+    if max_val > 0:
+        audio = audio / max_val * 0.7
+
+    # Konversi ke WAV byte buffer
+    audio_int16 = (audio * 32767).astype(np.int16)
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(audio_int16.tobytes())
+    
+    return base64.b64encode(buffer.getvalue()).decode()
+
+def putar_backsound():
+    """Memutar audio jazz bawaan menggunakan HTML5 Player."""
+    st.caption("🎷 Backsound Jazz Embedded Aktif")
+    b64_data = buat_audio_jazz_embedded()
+    audio_html = f"""
+        <audio autoplay loop controls style="width: 100%; height: 35px; margin-top: 5px;">
+            <source src="data:audio/wav;base64,{b64_data}" type="audio/wav">
+        </audio>
+    """
+    st.markdown(audio_html, unsafe_allow_html=True)
 
 # =========================================================
 # DATA
@@ -407,14 +479,11 @@ def pindah_halaman(nomor):
     st.rerun()
 
 
-# ---------- Pencatatan jawaban & analisis kesalahan ----------
-
 def _f(x):
     return str(x)
 
 
 def item(label, jawab, benar, ok, catatan="", f=_f):
-    """Satu butir jawaban siswa yang akan dibahas di bagian Refleksi."""
     return {
         "label": label,
         "jawab": f(jawab),
@@ -425,7 +494,6 @@ def item(label, jawab, benar, ok, catatan="", f=_f):
 
 
 def catat(kunci, daftar, masukan):
-    """Menyimpan jawaban terkirim. Boleh dikirim ulang sebelum lanjut."""
     rekam = st.session_state.rekam
     lama = rekam.get(kunci, {})
     jumlah_ok = sum(1 for d in daftar if d["ok"])
@@ -443,7 +511,6 @@ def catat(kunci, daftar, masukan):
 
 
 def awal(kunci, nama, default=0):
-    """Nilai terakhir yang dikirim siswa (untuk mengisi kembali kolom)."""
     return st.session_state.rekam.get(kunci, {}).get("masukan", {}).get(nama, default)
 
 
@@ -457,16 +524,12 @@ def info_terkirim(kunci):
 
 
 def ab_siswa():
-    """a dan b yang dikirim siswa pada Langkah 1 dan 2."""
     return awal("jawab_a", "a", 0), awal("jawab_b", "b", 0)
 
 
 def rumus_siswa():
-    """(koefisien n, konstanta) yang dikirim siswa pada Langkah 3."""
     return awal("jawab_rumus", "koef", 0), awal("jawab_rumus", "konst", 0)
 
-
-# ---------- Diagnosis letak kesalahan (kesalahan umum) ----------
 
 def cat_a(v, a, b, f=_f):
     benar = f"Suku pertama a = U₁ adalah angka paling awal pada barisan, yaitu {f(a)}."
@@ -542,10 +605,7 @@ def cat_n(v, a, b, n_target, f=_f):
     return benar
 
 
-# ---------- Pembahasan di bagian Refleksi ----------
-
 def status_langkah(kunci):
-    """(jumlah butir benar, jumlah butir) atau None jika belum dikerjakan."""
     r = st.session_state.rekam.get(kunci)
     if not r:
         return None
@@ -641,15 +701,11 @@ def navigasi(kembali_ke, lanjut_ke, terbuka, label_kembali="⬅️ Kembali",
                       use_container_width=True, key="nav_kunci")
 
 
-# ---------- Soal kehidupan nyata ----------
-
 def rupiah(x):
-    """10000 -> 'Rp10.000'"""
     return "Rp" + f"{x:,}".replace(",", ".")
 
 
 def ambil_konteks():
-    """Data soal kehidupan nyata: diacak sekali, tetap selama satu misi."""
     if st.session_state.konteks is None:
         baris = random.randint(8, 12)
         st.session_state.konteks = {
@@ -732,11 +788,6 @@ def svg_tabungan(a, b):
 def halaman_masalah(kunci, tag, judul, svg, cerita, c, fmt, tanya_un,
                     tanya_n, sebelum, sesudah, step=1,
                     label_lanjut="➡️ Langkah Berikutnya", aksi_lanjut=None):
-    """Satu halaman soal cerita barisan aritmatika (kursi & tabungan).
-
-    c = {"a", "b", "n_tanya", "n_cari"}; fmt = fungsi penampil nilai.
-    Jawaban dikirim apa adanya; pembahasan benar-salah ada di Refleksi.
-    """
     flag = f"jawab_{kunci}"
     a_, b_ = c["a"], c["b"]
     k_ = a_ - b_
@@ -797,7 +848,6 @@ def halaman_masalah(kunci, tag, judul, svg, cerita, c, fmt, tanya_un,
 
 
 def svg_pasangan(a, b, n=6):
-    """Ilustrasi trik pasangan: suku pertama + terakhir = suku kedua + ke-(n-1) ..."""
     nilai = [a + i * b for i in range(n)]
     xs = [70 + i * 118 for i in range(n)]
     warna = ["#ef4444", "#f59e0b", "#10b981"]
@@ -832,24 +882,7 @@ def svg_pasangan(a, b, n=6):
 </svg>"""
 
 
-def putar_backsound():
-    """Memutar musik jazz langsung dari URL online tanpa butuh file lokal."""
-    st.caption("🎷 Backsound Jazz Online Aktif")
-    # Link audio jazz bebas royalti
-    jazz_url = "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"
-    
-    audio_html = f"""
-        <iframe src="{jazz_url}" allow="autoplay" id="audio" style="display:none"></iframe>
-        <audio autoplay loop controls style="width: 100%; height: 40px; margin-top: 5px;">
-            <source src="{jazz_url}" type="audio/mpeg">
-            Browser kamu tidak mendukung pemutar audio.
-        </audio>
-    """
-    st.markdown(audio_html, unsafe_allow_html=True)
-
-
 def buat_lkpd_html():
-    """Lembar hasil LKPD (cetak / simpan PDF dari browser)."""
     s = st.session_state
     e = html.escape
     d = SOAL[s.soal_index]
@@ -1395,11 +1428,11 @@ elif halaman == 9:
 elif halaman == 10:
     c = ambil_konteks()["tabung"]
     a_, b_ = c["a"], c["b"]
-    n_s = c["n_tanya"] + 4                      # 12 - 16 minggu
+    n_s = c["n_tanya"] + 4
     u6 = a_ + 5 * b_
     un_s = a_ + (n_s - 1) * b_
-    sn_s = n_s * (a_ + un_s) // 2               # selalu bilangan bulat
-    tercapai = c["n_cari"] % 2 == 1             # variasi: tercapai / belum
+    sn_s = n_s * (a_ + un_s) // 2
+    tercapai = c["n_cari"] % 2 == 1
     target = sn_s - 3 * b_ if tercapai else sn_s + 3 * b_
     pilihan_benar = "Ya, target tercapai" if tercapai else "Tidak, target belum tercapai"
     batas = 100_000_000
@@ -1457,29 +1490,24 @@ elif halaman == 10:
 
     if st.button("📨 Kirim Jawaban", use_container_width=True, key="kirim_sn"):
         pasangan = a_ + u6
-        # nomor 1
         c1 = f"U₁ + U₆ = {rupiah(a_)} + {rupiah(u6)} = {rupiah(pasangan)}."
         if ip == 0:
             c1 = "Bagian ini belum kamu isi. " + c1
         elif ip == u6:
             c1 = "Kamu hanya menulis U₆, belum menjumlahkannya dengan U₁. " + c1
-        # nomor 2
         c2 = "Enam suku dipasangkan dua-dua, jadi ada 6 ÷ 2 = 3 pasangan."
         if iq == 6:
             c2 = "Kamu menulis banyak suku (6), bukan banyak pasangan. " + c2
-        # nomor 3
         c3 = (f"S₆ = banyak pasangan × jumlah satu pasangan = 3 × {rupiah(pasangan)} "
               f"= {rupiah(3 * pasangan)}.")
         if is6 == pasangan:
             c3 = "Kamu baru menghitung satu pasangan. " + c3
-        # nomor 5
         c5 = (f"S{sub(n_s)} = n/2 × (a + U{sub(n_s)}) = {n_s}/2 × ({a_} + {un_s}) "
               f"= {rupiah(sn_s)}.")
         if isn == n_s * (a_ + un_s):
             c5 = "Kamu lupa membagi dua (÷ 2) pada rumus Sₙ. " + c5
         elif isn == un_s:
             c5 = "Kamu menulis suku terakhir, bukan jumlah seluruh suku. " + c5
-        # nomor 6
         if ipil == "— pilih —":
             c6 = "Kamu belum memilih jawaban. "
         elif ipil != pilihan_benar:
