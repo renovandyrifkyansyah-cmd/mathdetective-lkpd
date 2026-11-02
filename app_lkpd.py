@@ -1632,6 +1632,42 @@ elif halaman == 11:
             use_container_width=True,
         )
         st.caption("Buka file hasil unduhan di browser, lalu tekan Ctrl+P untuk menyimpannya sebagai PDF.")
+        
+                # ---------------------------------------------------
+        # FITUR BARU: KIRIM HASIL LKPD KE GOOGLE FORM
+        # ---------------------------------------------------
+        st.markdown("---")
+        st.subheader("📨 Kirim Hasil LKPD")
+
+        kartu(
+            "Langkah mengirim hasil ke guru:<br>"
+            "<b>1.</b> Klik tombol <b>Unduh Lembar Hasil LKPD</b> di atas.<br>"
+            "<b>2.</b> Salin <b>Ringkasan Hasil</b> di bawah ini.<br>"
+            "<b>3.</b> Klik tombol <b>Buka Formulir Pengiriman</b>, lalu isi dan "
+            "kirim sesuai petunjuk di formulir (unggah file hasil unduhan dan/atau "
+            "tempel ringkasan)."
+        )
+
+        ringkasan = (
+            f"Nama: {st.session_state.nama or '-'}\n"
+            f"Skor Misi: {st.session_state.skor_misi} / {SKOR_MAKS_MISI}\n"
+            f"Skor Total: {st.session_state.skor_total}\n"
+            f"Misi Selesai: {st.session_state.misi_selesai}\n"
+            f"Waktu: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+        )
+        st.markdown("**Ringkasan Hasil (klik ikon salin di pojok kanan atas kotak):**")
+        st.code(ringkasan, language="text")
+
+        LINK_FORM_LKPD = "https://forms.gle/WERqQk5rr1RfSdFf8"
+        try:
+            st.link_button(
+                "🚀 Buka Formulir Pengiriman",
+                LINK_FORM_LKPD,
+                use_container_width=True,
+            )
+        except AttributeError:
+            # Cadangan untuk Streamlit versi lama (< 1.31)
+            st.markdown(f"[🚀 **Buka Formulir Pengiriman**]({LINK_FORM_LKPD})")
 
     st.markdown("---")
     st.subheader("🔄 Misi Berikutnya")
