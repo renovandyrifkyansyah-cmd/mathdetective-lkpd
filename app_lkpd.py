@@ -1,10 +1,10 @@
 """
-🔎 MATH DETECTIVE — LKPD Interaktif Noir & Jazz Embedded Edition
+🔎 MATH DETECTIVE — LKPD Interaktif
 Menemukan Rumus Suku ke-n Barisan Aritmatika
 =================================================================
 
 Cara menjalankan:
-    pip install streamlit numpy
+    pip install streamlit
     streamlit run app_lkpd.py
 
 Struktur LKPD (1 langkah = 1 halaman):
@@ -17,23 +17,26 @@ Struktur LKPD (1 langkah = 1 halaman):
     Halaman 7   Langkah 5 - Penalaran kritis
     Halaman 8   Langkah 6 - Masalah nyata: kursi bioskop
     Halaman 9   Langkah 7 - Masalah nyata: menabung mandiri
-    Halaman 10  Langkah 8 - Total tabungan (Sₙ)
-    Halaman 11  Hasil, Kesimpulan & Refleksi
+    Halaman 10  Hasil, Kesimpulan & Refleksi
+
+Fitur tampilan: tema latar bergradasi (pilih di sidebar) dan backsound.
 """
 
 import base64
 import html
 import io
+import math
 import os
 import random
+import sys
 import wave
+from array import array
 from datetime import datetime
 
-import numpy as np
 import streamlit as st
 
 # =========================================================
-# KONFIGURASI HALAMAN & TEMA DETEKTIF NOIR KLASIK
+# KONFIGURASI HALAMAN
 # =========================================================
 
 st.set_page_config(
@@ -45,77 +48,26 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-/* Background aplikasi bertema ruang investigasi klasik (Noir/Sepia Gelap) */
-.stApp {
-    background: radial-gradient(circle at center, #1a1510 0%, #0d0a08 100%);
-    color: #e2d9cc;
-    font-family: 'Courier New', Courier, monospace;
-}
+.block-container { max-width: 950px; padding-top: 1.5rem; padding-bottom: 3rem; }
 
-/* Container utama bergaya Map Kasus Rahasia (Casefile) */
-.block-container {
-    max-width: 950px;
-    padding-top: 1.5rem;
-    padding-bottom: 3rem;
-    background: rgba(28, 23, 18, 0.92);
-    backdrop-filter: blur(8px);
-    border-radius: 12px;
-    border: 2px solid #3d3024;
-    box-shadow: 0 0 35px rgba(0, 0, 0, 0.9), inset 0 0 15px rgba(212, 175, 55, 0.05);
-}
+.main-title { text-align: center; font-size: 34px; font-weight: 800; margin-bottom: 2px; }
+.subtitle   { text-align: center; font-size: 16px; margin-bottom: 14px; opacity: .85; }
 
-/* Judul & Subjudul bertema Detektif */
-.main-title {
-    text-align: center; font-size: 36px; font-weight: 900;
-    color: #d4af37; letter-spacing: 3px;
-    text-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
-    font-family: 'Georgia', serif; margin-bottom: 2px;
-}
-.subtitle {
-    text-align: center; font-size: 15px; color: #a39585;
-    font-style: italic; margin-bottom: 14px;
-}
-
-/* Tag & Elemen Papan Bukti */
 .lkpd-tag {
-    display: inline-block; padding: 4px 16px; border-radius: 4px;
-    background: #8b0000; color: #f5e6d3; font-size: 13px; font-weight: 800;
-    letter-spacing: 1.5px; margin-bottom: 6px; border: 1px solid #b22222;
-    box-shadow: 2px 2px 6px rgba(0,0,0,0.6);
+    display: inline-block; padding: 4px 14px; border-radius: 999px;
+    background: #6d28d9; color: #fff; font-size: 13px; font-weight: 700;
+    letter-spacing: .5px; margin-bottom: 6px;
 }
 .sequence-box {
-    padding: 22px; border-radius: 8px; text-align: center;
-    font-size: 30px; font-weight: 800; margin: 14px 0;
-    border: 2px dashed #d4af37; background: rgba(212, 175, 55, 0.06);
-    color: #f3e5ab; font-family: 'Courier New', monospace; letter-spacing: 2px;
+    padding: 22px; border-radius: 16px; text-align: center;
+    font-size: 30px; font-weight: 700; margin: 14px 0;
+    border: 2px solid #2d6cdf; background: rgba(45,108,223,.08);
 }
 .kartu {
-    padding: 16px 20px; border-radius: 6px; margin: 12px 0;
-    border-left: 5px solid #d4af37; background: #241d17;
-    color: #d9ceb2; line-height: 1.6; box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+    padding: 16px 20px; border-radius: 14px; margin: 12px 0;
+    border-left: 6px solid #f59e0b; background: rgba(245,158,11,.10);
 }
-.progress-text { text-align: center; font-size: 14px; color: #8c7d6b; margin-bottom: 4px; }
-
-/* Custom Sidebar Tema Detektif */
-[data-testid="stSidebar"] {
-    background-color: #120e0b !important;
-    border-right: 1px solid #2d231b;
-}
-
-/* Custom Tombol / Button */
-.stButton>button {
-    background: linear-gradient(180deg, #3a2e22 0%, #241c14 100%) !important;
-    color: #d4af37 !important;
-    border: 1px solid #6b553d !important;
-    font-weight: bold !important;
-    letter-spacing: 1px !important;
-    transition: all 0.3s ease !important;
-}
-.stButton>button:hover {
-    background: #d4af37 !important;
-    color: #120e0b !important;
-    box-shadow: 0 0 10px rgba(212, 175, 55, 0.5) !important;
-}
+.progress-text { text-align: center; font-size: 14px; margin-bottom: 4px; }
 
 @media (max-width: 600px) {
     .main-title { font-size: 26px; }
@@ -127,73 +79,156 @@ st.markdown(
 )
 
 # =========================================================
-# BACKSOUND JAZZ EMBEDDED GENERATOR (Sintesis Audio Internal)
+# TEMA LATAR (background menarik, bisa dipilih di sidebar)
 # =========================================================
 
-@st.cache_resource
-def buat_audio_jazz_embedded():
-    """Menghasilkan audio jazz secara internal (tanpa butuh file mp3/wav luar)."""
-    sample_rate = 22050
-    duration = 16.0  # 16 detik loopable
-    t = np.linspace(0, duration, int(sample_rate * duration), False)
-    
-    bpm = 80
-    beat_dur = 60.0 / bpm
-    audio = np.zeros_like(t)
-    
-    # 1. Walking Bassline (Tone Noir Jazz)
-    bass_notes = [43.65, 58.27, 49.00, 51.91, 43.65, 65.41, 61.74, 65.41]
-    for i, _ in enumerate(t):
-        current_beat = int((i / sample_rate) / beat_dur)
-        note_freq = bass_notes[current_beat % len(bass_notes)]
-        val = 0.6 * np.sin(2 * np.pi * note_freq * (i / sample_rate))
-        val += 0.2 * np.sin(2 * np.pi * note_freq * 2 * (i / sample_rate))
-        beat_pos = ((i / sample_rate) % beat_dur) / beat_dur
-        env = np.exp(-3.0 * beat_pos)
-        audio[i] += val * env * 0.4
+TEMA = {
+    "🌌 Galaksi": {
+        "bg": "linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)",
+        "a1": "#7c3aed", "a2": "#2563eb",
+    },
+    "🌊 Samudra": {
+        "bg": "linear-gradient(135deg,#0f2027 0%,#203a43 50%,#2c5364 100%)",
+        "a1": "#0891b2", "a2": "#2563eb",
+    },
+    "🌅 Senja": {
+        "bg": "linear-gradient(135deg,#f6d365 0%,#fda085 50%,#f093fb 100%)",
+        "a1": "#f97316", "a2": "#db2777",
+    },
+    "🌿 Hutan": {
+        "bg": "linear-gradient(135deg,#134e5e 0%,#2d8f6f 50%,#71b280 100%)",
+        "a1": "#059669", "a2": "#0d9488",
+    },
+    "☁️ Langit Cerah": {
+        "bg": "linear-gradient(135deg,#89f7fe 0%,#66a6ff 50%,#a18cd1 100%)",
+        "a1": "#2563eb", "a2": "#7c3aed",
+    },
+}
 
-    # 2. Soft Jazz Piano Chords (Fm7, Bbm7, Eb7, Abmaj7)
-    chords = [
-        [174.61, 207.65, 261.63, 311.13],
-        [116.54, 138.59, 174.61, 207.65],
-        [155.56, 196.00, 233.08, 277.18],
-        [207.65, 261.63, 311.13, 392.00]
+CSS_TEMA = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap');
+
+@keyframes geserLatar { 0% {background-position: 0% 50%;} 50% {background-position: 100% 50%;} 100% {background-position: 0% 50%;} }
+@keyframes geserSimbol { from {background-position: 0 0;} to {background-position: 360px 360px;} }
+@keyframes melayang { 0%, 100% {transform: translateY(0);} 50% {transform: translateY(-5px);} }
+
+/* ---- Latar bergradasi + simbol matematika yang bergerak pelan ---- */
+.stApp { background: __BG__ !important; background-size: 300% 300% !important; animation: geserLatar 24s ease infinite; }
+.stApp::before {
+    content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .17;
+    background-image: url("data:image/svg+xml;base64,__POLA__");
+    background-size: 360px 360px; animation: geserSimbol 70s linear infinite;
+}
+[data-testid="stHeader"] { background: transparent !important; }
+#MainMenu, footer { visibility: hidden; }
+
+/* ---- Kartu konten utama ---- */
+.block-container {
+    position: relative; z-index: 1; max-width: 950px; margin: 1rem auto 2rem;
+    padding: 2rem 2.2rem 3rem !important; background: rgba(255,255,255,.94);
+    border-radius: 26px; border: 1px solid rgba(255,255,255,.7);
+    box-shadow: 0 22px 60px rgba(0,0,0,.38);
+}
+.block-container, .block-container p, .block-container li, .block-container label,
+.block-container span, .block-container h1, .block-container h2, .block-container h3,
+.block-container h4, .block-container h5, .block-container h6, .block-container td,
+.block-container th, .block-container summary, .block-container .katex,
+.block-container [data-testid="stMarkdownContainer"],
+.block-container [data-testid="stMetricValue"], .block-container [data-testid="stMetricLabel"] { color: #0f172a; }
+.block-container p, .block-container li, .block-container label, .block-container h1,
+.block-container h2, .block-container h3, .block-container h4, .block-container td,
+.block-container th { font-family: 'Poppins', 'Segoe UI', sans-serif; }
+
+.block-container .main-title {
+    background: linear-gradient(90deg,__A1__,#db2777,#f59e0b);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.block-container .lkpd-tag { background: linear-gradient(90deg,__A1__,__A2__); color: #ffffff; }
+.sequence-box {
+    background: linear-gradient(135deg, rgba(45,108,223,.10), rgba(168,85,247,.12));
+    animation: melayang 4.5s ease-in-out infinite;
+}
+.block-container img { box-shadow: 0 10px 28px rgba(0,0,0,.20); }
+
+/* ---- Kolom isian ---- */
+.block-container input, .block-container textarea { color: #0f172a !important; background: #ffffff !important; }
+.block-container [data-baseweb="input"], .block-container [data-baseweb="base-input"],
+.block-container [data-baseweb="textarea"], .block-container [data-baseweb="select"] > div {
+    background-color: #ffffff !important; border-color: #cbd5e1 !important; border-radius: 12px !important;
+}
+.block-container [data-baseweb="select"] * { color: #0f172a !important; }
+.block-container [data-testid="stNumberInput"] button { background: #e2e8f0 !important; color: #0f172a !important; }
+
+/* ---- Tombol ---- */
+.block-container .stButton > button, .block-container .stDownloadButton > button {
+    background: linear-gradient(135deg,__A1__,__A2__) !important; color: #ffffff !important;
+    border: 0 !important; border-radius: 14px !important; font-weight: 700 !important;
+    padding: .65rem 1rem !important; box-shadow: 0 8px 20px rgba(0,0,0,.22);
+    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.block-container .stButton > button *, .block-container .stDownloadButton > button * { color: #ffffff !important; }
+.block-container .stButton > button:hover, .block-container .stDownloadButton > button:hover {
+    transform: translateY(-2px); filter: brightness(1.08); box-shadow: 0 12px 26px rgba(0,0,0,.28);
+}
+.block-container .stButton > button:disabled { background: #cbd5e1 !important; box-shadow: none; transform: none; }
+.block-container .stButton > button:disabled * { color: #64748b !important; }
+
+/* ---- Komponen lain ---- */
+.block-container [data-testid="stAlert"] { border-radius: 14px; }
+.block-container table { border-collapse: collapse; }
+.block-container th { background: #eef2ff; }
+.block-container td, .block-container th { border: 1px solid #cbd5e1; padding: 6px 10px; }
+.block-container [data-testid="stExpander"] { border-radius: 14px; background: rgba(241,245,249,.85); }
+.block-container [data-testid="stProgress"] div[role="progressbar"] > div,
+.block-container .stProgress > div > div > div > div { background: linear-gradient(90deg,__A1__,__A2__) !important; }
+
+/* ---- Sidebar gelap ---- */
+[data-testid="stSidebar"] { background: rgba(12,18,40,.92) !important; border-right: 1px solid rgba(255,255,255,.14); }
+[data-testid="stSidebar"] * { color: #e5e7eb !important; }
+[data-testid="stSidebar"] [data-baseweb="select"] > div {
+    background: rgba(255,255,255,.10) !important; border-color: rgba(255,255,255,.28) !important;
+}
+[data-testid="stSidebar"] audio { width: 100%; border-radius: 12px; }
+
+@media (max-width: 640px) {
+    .block-container { padding: 1.1rem .95rem 2rem !important; border-radius: 18px; margin: .4rem auto 1rem; }
+}
+</style>
+"""
+
+
+def _pola_simbol():
+    """Pola simbol matematika (SVG, base64) untuk latar belakang."""
+    teks = [
+        ("+", 24, 70, 46), ("3", 150, 60, 36), ("×", 260, 90, 44), ("9", 70, 160, 40),
+        ("=", 190, 170, 44), ("Σ", 300, 200, 40), ("−", 30, 250, 48), ("12", 120, 270, 34),
+        ("÷", 240, 300, 44), ("π", 320, 330, 38), ("6", 60, 340, 34), ("∞", 180, 230, 38),
     ]
-    for i, _ in enumerate(t):
-        chord_idx = int((i / sample_rate) / (beat_dur * 4)) % len(chords)
-        chord = chords[chord_idx]
-        beat_pos = ((i / sample_rate) % (beat_dur * 2)) / (beat_dur * 2)
-        if beat_pos < 0.8:
-            env = np.exp(-2.0 * beat_pos)
-            chord_val = sum(np.sin(2 * np.pi * f * (i / sample_rate)) for f in chord)
-            audio[i] += chord_val * env * 0.08
+    isi = "".join(
+        f'<text x="{x}" y="{y}" font-size="{s}">{t}</text>' for t, x, y, s in teks
+    )
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="360">'
+        f'<g fill="#ffffff" font-family="Arial, sans-serif" font-weight="700">{isi}</g></svg>'
+    )
+    return base64.b64encode(svg.encode("utf-8")).decode()
 
-    # Normalisasi
-    max_val = np.max(np.abs(audio))
-    if max_val > 0:
-        audio = audio / max_val * 0.7
 
-    # Konversi ke WAV byte buffer
-    audio_int16 = (audio * 32767).astype(np.int16)
-    buffer = io.BytesIO()
-    with wave.open(buffer, 'wb') as wav_file:
-        wav_file.setnchannels(1)
-        wav_file.setsampwidth(2)
-        wav_file.setframerate(sample_rate)
-        wav_file.writeframes(audio_int16.tobytes())
-    
-    return base64.b64encode(buffer.getvalue()).decode()
+def terapkan_tema():
+    nama = st.session_state.get("tema", next(iter(TEMA)))
+    t = TEMA.get(nama, next(iter(TEMA.values())))
+    css = (
+        CSS_TEMA.replace("__BG__", t["bg"])
+        .replace("__A1__", t["a1"])
+        .replace("__A2__", t["a2"])
+        .replace("__POLA__", _pola_simbol())
+    )
+    st.markdown(css, unsafe_allow_html=True)
 
-def putar_backsound():
-    """Memutar audio jazz bawaan menggunakan HTML5 Player."""
-    st.caption("🎷 Backsound Jazz Embedded Aktif")
-    b64_data = buat_audio_jazz_embedded()
-    audio_html = f"""
-        <audio autoplay loop controls style="width: 100%; height: 35px; margin-top: 5px;">
-            <source src="data:audio/wav;base64,{b64_data}" type="audio/wav">
-        </audio>
-    """
-    st.markdown(audio_html, unsafe_allow_html=True)
+
+terapkan_tema()
+
 
 # =========================================================
 # DATA
@@ -294,7 +329,7 @@ def tampil_svg(svg, maks=780):
     st.markdown(
         f'<div style="text-align:center;margin:10px 0">'
         f'<img alt="ilustrasi" src="data:image/svg+xml;base64,{data}" '
-        f'style="width:100%;max-width:{maks}px;border-radius:10px;border:1px solid #3d3024;"></div>',
+        f'style="width:100%;max-width:{maks}px;border-radius:18px;"></div>',
         unsafe_allow_html=True,
     )
 
@@ -304,16 +339,23 @@ def tampil_svg(svg, maks=780):
 # =========================================================
 
 def svg_sampul():
-    return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 260" font-family="Georgia, serif">
-<rect width="800" height="260" rx="12" fill="#140f0c"/>
-<path d="M0 0 L800 260 L0 260 Z" fill="#0d0a08" opacity="0.6"/>
-<text x="40" y="85" font-size="18" fill="#8b0000" font-weight="900" letter-spacing="4">CONFIDENTIAL CASE FILE</text>
-<text x="40" y="145" font-size="44" fill="#d4af37" font-weight="800">MATH DETECTIVE</text>
-<text x="40" y="185" font-size="20" fill="#a39585" font-style="italic">Pecahkan misteri rumus suku ke-n Barisan Aritmatika</text>
-<circle cx="640" cy="130" r="75" fill="none" stroke="#d4af37" stroke-width="6" opacity="0.4"/>
-<line x1="695" y1="185" x2="755" y2="245" stroke="#d4af37" stroke-width="14" stroke-linecap="round"/>
-<text x="640" y="125" text-anchor="middle" fill="#d4af37" font-size="22" font-weight="700">a + (n−1)b</text>
-<text x="640" y="155" text-anchor="middle" fill="#8b0000" font-size="18" font-weight="900">Uₙ = ?</text>
+    return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 260" font-family="Arial, sans-serif">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#1e3a8a"/><stop offset="1" stop-color="#6d28d9"/></linearGradient></defs>
+<rect width="800" height="260" rx="22" fill="url(#g)"/>
+<g fill="#fff" opacity="0.16" font-size="48" font-weight="700">
+<text x="30" y="70">3</text><text x="120" y="215">6</text><text x="270" y="55">9</text>
+<text x="400" y="235">12</text><text x="690" y="60">15</text><text x="520" y="40">18</text></g>
+<g fill="#fbbf24"><text x="470" y="40" font-size="26">★</text><text x="745" y="170" font-size="22">★</text>
+<text x="40" y="240" font-size="20">★</text></g>
+<text x="40" y="95" font-size="20" fill="#fde68a" font-weight="700" letter-spacing="3">LKPD • KELAS VIII</text>
+<text x="40" y="150" font-size="46" fill="#fff" font-weight="800">MATH DETECTIVE</text>
+<text x="40" y="190" font-size="22" fill="#e0e7ff">Pecahkan misteri rumus suku ke-n</text>
+<text x="40" y="222" font-size="18" fill="#c7d2fe">Barisan Aritmatika</text>
+<circle cx="640" cy="125" r="72" fill="#dbeafe" fill-opacity="0.22" stroke="#fbbf24" stroke-width="14"/>
+<line x1="692" y1="178" x2="752" y2="238" stroke="#fbbf24" stroke-width="18" stroke-linecap="round"/>
+<text x="640" y="118" text-anchor="middle" fill="#fff" font-size="19" font-weight="700">a + (n−1)b</text>
+<text x="640" y="148" text-anchor="middle" fill="#fde68a" font-size="30" font-weight="800">Uₙ = ?</text>
 </svg>"""
 
 
@@ -322,26 +364,28 @@ def svg_kasus(urutan):
     for i, v in enumerate(urutan):
         x = 372 + i * 68
         kotak += (
-            f'<rect x="{x}" y="82" width="58" height="58" rx="8" fill="#241d17" stroke="#d4af37" stroke-width="2"/>'
-            f'<text x="{x + 29}" y="119" text-anchor="middle" font-size="22" font-weight="700" fill="#d4af37">{v}</text>'
+            f'<rect x="{x}" y="82" width="58" height="58" rx="10" fill="#1d4ed8" stroke="#93c5fd" stroke-width="2"/>'
+            f'<text x="{x + 29}" y="119" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">{v}</text>'
         )
     x = 372 + len(urutan) * 68
     kotak += (
-        f'<rect x="{x}" y="82" width="58" height="58" rx="8" fill="#8b0000" stroke="#b22222" stroke-width="2"/>'
+        f'<rect x="{x}" y="82" width="58" height="58" rx="10" fill="#dc2626" stroke="#fecaca" stroke-width="2"/>'
         f'<text x="{x + 29}" y="123" text-anchor="middle" font-size="32" font-weight="800" fill="#fff">?</text>'
     )
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" font-family="Courier New, monospace">
-<rect width="800" height="300" rx="12" fill="#120e0b"/>
-<rect x="40" y="40" width="300" height="220" rx="12" fill="#1c1712" stroke="#3d3024" stroke-width="4"/>
-<circle cx="190" cy="150" r="58" fill="#0d0a08" stroke="#d4af37" stroke-width="5"/>
-<circle cx="190" cy="150" r="14" fill="#d4af37"/>
-<rect x="184" y="98" width="12" height="38" rx="4" fill="#d4af37"/>
-<text x="190" y="52" text-anchor="middle" font-size="14" fill="#a39585" font-weight="700">BRANKAS RAHASIA</text>
-<text x="372" y="62" font-size="18" fill="#d4af37" font-weight="700">KODE PETUNJUK:</text>
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" font-family="Arial, sans-serif">
+<rect width="800" height="300" rx="22" fill="#0f172a"/>
+<rect x="40" y="40" width="300" height="220" rx="18" fill="#475569" stroke="#cbd5e1" stroke-width="4"/>
+<rect x="60" y="60" width="260" height="180" rx="12" fill="#334155"/>
+<circle cx="190" cy="150" r="58" fill="#1e293b" stroke="#fbbf24" stroke-width="6"/>
+<circle cx="190" cy="150" r="14" fill="#fbbf24"/>
+<rect x="184" y="98" width="12" height="38" rx="5" fill="#fbbf24"/>
+<g fill="#94a3b8"><rect x="52" y="85" width="12" height="30" rx="4"/><rect x="52" y="185" width="12" height="30" rx="4"/></g>
+<text x="190" y="52" text-anchor="middle" font-size="14" fill="#e2e8f0" font-weight="700">BRANKAS RAHASIA</text>
+<text x="372" y="62" font-size="18" fill="#fde68a" font-weight="700">KODE PETUNJUK:</text>
 {kotak}
-<text x="372" y="190" font-size="16" fill="#d9ceb2">Kode berikutnya mengikuti pola tertentu.</text>
-<text x="372" y="222" font-size="16" fill="#d9ceb2">Tugasmu: temukan rumus kode ke-n!</text>
-<text x="372" y="252" font-size="15" fill="#a39585">Detektif, brankas menunggumu... 🔎</text>
+<text x="372" y="190" font-size="17" fill="#e2e8f0">Kode berikutnya mengikuti pola tertentu.</text>
+<text x="372" y="222" font-size="17" fill="#e2e8f0">Tugasmu: temukan rumus kode ke-n!</text>
+<text x="372" y="252" font-size="15" fill="#94a3b8">Detektif, brankas menunggumu... 🔎</text>
 </svg>"""
 
 
@@ -352,18 +396,18 @@ def svg_tangga(urutan):
         h = 190 * v / m
         x = 50 + i * 145
         y = 250 - h
-        warna = "#d4af37" if i == 0 else "#6b553d"
+        warna = "#f59e0b" if i == 0 else "#3b82f6"
         label = f"U{sub(i + 1)}" + (" = a" if i == 0 else "")
         isi += (
-            f'<rect x="{x}" y="{y:.1f}" width="100" height="{h:.1f}" rx="6" fill="{warna}"/>'
-            f'<text x="{x + 50}" y="{y - 8:.1f}" text-anchor="middle" font-size="24" font-weight="700" fill="#f3e5ab">{v}</text>'
-            f'<text x="{x + 50}" y="276" text-anchor="middle" font-size="18" font-weight="700" fill="#a39585">{label}</text>'
+            f'<rect x="{x}" y="{y:.1f}" width="100" height="{h:.1f}" rx="8" fill="{warna}"/>'
+            f'<text x="{x + 50}" y="{y - 8:.1f}" text-anchor="middle" font-size="24" font-weight="700" fill="#0f172a">{v}</text>'
+            f'<text x="{x + 50}" y="276" text-anchor="middle" font-size="18" font-weight="700" fill="#334155">{label}</text>'
         )
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" font-family="Courier New, monospace">
-<rect width="800" height="300" rx="12" fill="#120e0b"/>
-<line x1="30" y1="250" x2="770" y2="250" stroke="#3d3024" stroke-width="3"/>
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" font-family="Arial, sans-serif">
+<rect width="800" height="300" rx="22" fill="#f1f5f9"/>
+<line x1="30" y1="250" x2="770" y2="250" stroke="#64748b" stroke-width="3"/>
 {isi}
-<text x="400" y="26" text-anchor="middle" font-size="15" fill="#a39585">Tinggi tiap batang = nilai suku. Batang emas adalah suku pertama.</text>
+<text x="400" y="26" text-anchor="middle" font-size="16" fill="#475569">Tinggi tiap batang = nilai suku. Batang emas adalah suku pertama.</text>
 </svg>"""
 
 
@@ -377,42 +421,43 @@ def svg_loncatan(urutan, b=None):
         mid = (xs[i] + xs[i + 1]) / 2
         isi += (
             f'<path d="M{x1} {y - 30} Q{mid} {y - 135} {x2} {y - 30}" fill="none" '
-            f'stroke="#d4af37" stroke-width="4" marker-end="url(#pa)"/>'
-            f'<rect x="{mid - 34}" y="{y - 112}" width="68" height="30" rx="6" fill="#241d17" stroke="#d4af37" stroke-width="2"/>'
-            f'<text x="{mid}" y="{y - 91}" text-anchor="middle" font-size="18" font-weight="800" fill="#d4af37">{label}</text>'
+            f'stroke="#f59e0b" stroke-width="5" marker-end="url(#pa)"/>'
+            f'<rect x="{mid - 34}" y="{y - 112}" width="68" height="30" rx="15" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>'
+            f'<text x="{mid}" y="{y - 91}" text-anchor="middle" font-size="18" font-weight="800" fill="#b45309">{label}</text>'
         )
     for i, (x, v) in enumerate(zip(xs, urutan)):
-        warna = "#d4af37" if i == 0 else "#3a2e22"
+        warna = "#f59e0b" if i == 0 else "#10b981"
         isi += (
-            f'<circle cx="{x}" cy="{y}" r="36" fill="{warna}" stroke="#6b553d" stroke-width="3"/>'
-            f'<text x="{x}" y="{y + 9}" text-anchor="middle" font-size="26" font-weight="800" fill="#f3e5ab">{v}</text>'
-            f'<text x="{x}" y="{y + 66}" text-anchor="middle" font-size="17" font-weight="700" fill="#a39585">U{sub(i + 1)}</text>'
+            f'<circle cx="{x}" cy="{y}" r="36" fill="{warna}" stroke="#fff" stroke-width="4"/>'
+            f'<text x="{x}" y="{y + 9}" text-anchor="middle" font-size="26" font-weight="800" fill="#fff">{v}</text>'
+            f'<text x="{x}" y="{y + 66}" text-anchor="middle" font-size="17" font-weight="700" fill="#065f46">U{sub(i + 1)}</text>'
         )
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" font-family="Courier New, monospace">
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" font-family="Arial, sans-serif">
 <defs><marker id="pa" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
-<path d="M0,0 L10,5 L0,10 z" fill="#d4af37"/></marker></defs>
-<rect width="800" height="300" rx="12" fill="#120e0b"/>
+<path d="M0,0 L10,5 L0,10 z" fill="#f59e0b"/></marker></defs>
+<rect width="800" height="300" rx="22" fill="#ecfdf5"/>
 {isi}
 </svg>"""
 
 
 def svg_mesin(rhs, masukan="n", keluaran="Uₙ"):
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 260" font-family="Courier New, monospace">
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 260" font-family="Arial, sans-serif">
 <defs><marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
-<path d="M0,0 L10,5 L0,10 z" fill="#a39585"/></marker></defs>
-<rect width="800" height="260" rx="12" fill="#120e0b"/>
-<text x="100" y="78" text-anchor="middle" font-size="16" fill="#a39585" font-weight="700">MASUKAN</text>
-<rect x="40" y="92" width="120" height="80" rx="8" fill="#241d17" stroke="#3d3024" stroke-width="2"/>
-<text x="100" y="146" text-anchor="middle" font-size="38" font-weight="800" fill="#d4af37">{masukan}</text>
-<line x1="165" y1="132" x2="255" y2="132" stroke="#a39585" stroke-width="4" marker-end="url(#ar)"/>
-<rect x="260" y="40" width="280" height="180" rx="12" fill="#1c1712" stroke="#d4af37" stroke-width="3"/>
-<text x="400" y="84" text-anchor="middle" font-size="16" fill="#d4af37" font-weight="700" letter-spacing="2">MESIN RUMUS</text>
-<rect x="290" y="105" width="220" height="60" rx="8" fill="#241d17"/>
-<text x="400" y="146" text-anchor="middle" font-size="26" font-weight="800" fill="#f3e5ab">{rhs}</text>
-<text x="400" y="200" text-anchor="middle" font-size="14" fill="#a39585">nomor suku masuk, nilai suku keluar</text>
-<line x1="545" y1="132" x2="635" y2="132" stroke="#a39585" stroke-width="4" marker-end="url(#ar)"/>
-<text x="700" y="78" text-anchor="middle" font-size="16" fill="#a39585" font-weight="700">KELUARAN</text>
-<rect x="640" y="92" width="120" height="80" rx="8" fill="#8b0000" stroke="#b22222" stroke-width="2"/>
+<path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker></defs>
+<rect width="800" height="260" rx="22" fill="#fefce8"/>
+<text x="100" y="78" text-anchor="middle" font-size="16" fill="#475569" font-weight="700">MASUKAN</text>
+<rect x="40" y="92" width="120" height="80" rx="16" fill="#3b82f6"/>
+<text x="100" y="146" text-anchor="middle" font-size="38" font-weight="800" fill="#fff">{masukan}</text>
+<line x1="165" y1="132" x2="255" y2="132" stroke="#475569" stroke-width="5" marker-end="url(#ar)"/>
+<rect x="260" y="40" width="280" height="180" rx="22" fill="#7c3aed"/>
+<circle cx="290" cy="70" r="12" fill="#c4b5fd"/><circle cx="510" cy="70" r="12" fill="#c4b5fd"/>
+<text x="400" y="84" text-anchor="middle" font-size="16" fill="#ddd6fe" font-weight="700" letter-spacing="2">MESIN RUMUS</text>
+<rect x="290" y="105" width="220" height="60" rx="12" fill="#5b21b6"/>
+<text x="400" y="146" text-anchor="middle" font-size="26" font-weight="800" fill="#fde68a">{rhs}</text>
+<text x="400" y="200" text-anchor="middle" font-size="14" fill="#ddd6fe">nomor suku masuk, nilai suku keluar</text>
+<line x1="545" y1="132" x2="635" y2="132" stroke="#475569" stroke-width="5" marker-end="url(#ar)"/>
+<text x="700" y="78" text-anchor="middle" font-size="16" fill="#475569" font-weight="700">KELUARAN</text>
+<rect x="640" y="92" width="120" height="80" rx="16" fill="#10b981"/>
 <text x="700" y="146" text-anchor="middle" font-size="38" font-weight="800" fill="#fff">{keluaran}</text>
 </svg>"""
 
@@ -428,45 +473,59 @@ def svg_grafik(a, b, n_max=8):
     garis = " ".join(f"{x:.1f},{y:.1f}" for x, y, _, _ in pts)
     isi = ""
     for x, y, n, v in pts:
-        warna = "#d4af37" if n == 1 else "#3a2e22"
+        warna = "#f59e0b" if n == 1 else "#2563eb"
         isi += (
-            f'<line x1="{x:.1f}" y1="{y0}" x2="{x:.1f}" y2="{y:.1f}" stroke="#6b553d" stroke-width="1.5" stroke-dasharray="4 4"/>'
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="8" fill="{warna}" stroke="#6b553d" stroke-width="2"/>'
-            f'<text x="{x:.1f}" y="{y - 16:.1f}" text-anchor="middle" font-size="16" font-weight="700" fill="#d4af37">{v}</text>'
-            f'<text x="{x:.1f}" y="{y0 + 24}" text-anchor="middle" font-size="16" fill="#a39585">{n}</text>'
+            f'<line x1="{x:.1f}" y1="{y0}" x2="{x:.1f}" y2="{y:.1f}" stroke="#fdba74" stroke-width="1.5" stroke-dasharray="4 4"/>'
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="9" fill="{warna}" stroke="#fff" stroke-width="3"/>'
+            f'<text x="{x:.1f}" y="{y - 16:.1f}" text-anchor="middle" font-size="16" font-weight="700" fill="#9a3412">{v}</text>'
+            f'<text x="{x:.1f}" y="{y0 + 24}" text-anchor="middle" font-size="16" fill="#475569">{n}</text>'
         )
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 340" font-family="Courier New, monospace">
-<rect width="800" height="340" rx="12" fill="#120e0b"/>
-<line x1="{x0}" y1="{y0}" x2="775" y2="{y0}" stroke="#3d3024" stroke-width="3"/>
-<line x1="{x0}" y1="{y0}" x2="{x0}" y2="30" stroke="#3d3024" stroke-width="3"/>
-<text x="775" y="{y0 + 24}" font-size="18" font-weight="700" fill="#a39585">n</text>
-<text x="{x0 + 8}" y="30" font-size="18" font-weight="700" fill="#a39585">Uₙ</text>
-<polyline points="{garis}" fill="none" stroke="#d4af37" stroke-width="3"/>
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 340" font-family="Arial, sans-serif">
+<rect width="800" height="340" rx="22" fill="#fff7ed"/>
+<line x1="{x0}" y1="{y0}" x2="775" y2="{y0}" stroke="#475569" stroke-width="3"/>
+<line x1="{x0}" y1="{y0}" x2="{x0}" y2="30" stroke="#475569" stroke-width="3"/>
+<text x="775" y="{y0 + 24}" font-size="18" font-weight="700" fill="#475569">n</text>
+<text x="{x0 + 8}" y="30" font-size="18" font-weight="700" fill="#475569">Uₙ</text>
+<polyline points="{garis}" fill="none" stroke="#2563eb" stroke-width="3"/>
 {isi}
-<text x="400" y="334" text-anchor="middle" font-size="15" fill="#a39585">Titik-titik suku barisan aritmatika selalu naik secara teratur (garis lurus).</text>
+<text x="400" y="334" text-anchor="middle" font-size="15" fill="#9a3412">Titik-titik suku barisan aritmatika selalu naik secara teratur (garis lurus).</text>
 </svg>"""
 
 
 def svg_lup(n1, n2):
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 220" font-family="Courier New, monospace">
-<rect width="800" height="220" rx="12" fill="#120e0b"/>
-<circle cx="120" cy="100" r="56" fill="none" stroke="#d4af37" stroke-width="10"/>
-<line x1="160" y1="142" x2="205" y2="187" stroke="#d4af37" stroke-width="14" stroke-linecap="round"/>
-<text x="120" y="118" text-anchor="middle" font-size="52" font-weight="800" fill="#d4af37">?</text>
-<text x="500" y="62" text-anchor="middle" font-size="20" fill="#a39585" font-weight="700">Dua angka mencurigakan:</text>
-<rect x="290" y="82" width="170" height="70" rx="8" fill="#241d17" stroke="#3d3024" stroke-width="2"/>
-<text x="375" y="130" text-anchor="middle" font-size="40" font-weight="800" fill="#d4af37">{n1}</text>
-<rect x="520" y="82" width="170" height="70" rx="8" fill="#8b0000" stroke="#b22222" stroke-width="2"/>
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 220" font-family="Arial, sans-serif">
+<defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#fef9c3"/><stop offset="1" stop-color="#fed7aa"/></linearGradient></defs>
+<rect width="800" height="220" rx="22" fill="url(#g2)"/>
+<circle cx="120" cy="100" r="56" fill="#fff" fill-opacity="0.6" stroke="#b45309" stroke-width="12"/>
+<line x1="160" y1="142" x2="205" y2="187" stroke="#b45309" stroke-width="16" stroke-linecap="round"/>
+<text x="120" y="118" text-anchor="middle" font-size="52" font-weight="800" fill="#b45309">?</text>
+<text x="500" y="62" text-anchor="middle" font-size="20" fill="#78350f" font-weight="700">Dua angka mencurigakan:</text>
+<rect x="290" y="82" width="170" height="70" rx="16" fill="#1d4ed8"/>
+<text x="375" y="130" text-anchor="middle" font-size="40" font-weight="800" fill="#fff">{n1}</text>
+<rect x="520" y="82" width="170" height="70" rx="16" fill="#7c3aed"/>
 <text x="605" y="130" text-anchor="middle" font-size="40" font-weight="800" fill="#fff">{n2}</text>
-<text x="500" y="190" text-anchor="middle" font-size="18" fill="#a39585">Mana yang benar-benar suku barisan?</text>
+<text x="500" y="190" text-anchor="middle" font-size="18" fill="#78350f">Mana yang benar-benar suku barisan?</text>
 </svg>"""
 
 
 def svg_piala():
-    return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 260" font-family="Georgia, serif">
-<rect width="800" height="260" rx="12" fill="#140f0c"/>
-<text x="400" y="130" text-anchor="middle" font-size="72" fill="#d4af37">★</text>
-<text x="400" y="210" text-anchor="middle" font-size="28" font-weight="800" fill="#f3e5ab" letter-spacing="4">MISI SELESAI!</text>
+    return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 260" font-family="Arial, sans-serif">
+<defs><linearGradient id="g3" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#065f46"/><stop offset="1" stop-color="#10b981"/></linearGradient></defs>
+<rect width="800" height="260" rx="22" fill="url(#g3)"/>
+<g fill="#fde68a"><rect x="90" y="40" width="10" height="22" rx="3" transform="rotate(25 95 51)"/>
+<rect x="190" y="150" width="10" height="22" rx="3" transform="rotate(-30 195 161)"/>
+<rect x="620" y="50" width="10" height="22" rx="3" transform="rotate(-20 625 61)"/>
+<rect x="700" y="140" width="10" height="22" rx="3" transform="rotate(35 705 151)"/>
+<circle cx="150" cy="95" r="6"/><circle cx="650" cy="110" r="6"/><circle cx="260" cy="40" r="5"/><circle cx="560" cy="35" r="5"/></g>
+<path d="M340 50 H460 V110 C460 150 430 170 400 170 C370 170 340 150 340 110 Z" fill="#fbbf24" stroke="#f59e0b" stroke-width="4"/>
+<path d="M340 68 H312 C300 68 300 122 346 126" fill="none" stroke="#fbbf24" stroke-width="10" stroke-linecap="round"/>
+<path d="M460 68 H488 C500 68 500 122 454 126" fill="none" stroke="#fbbf24" stroke-width="10" stroke-linecap="round"/>
+<rect x="388" y="170" width="24" height="26" fill="#f59e0b"/>
+<rect x="346" y="196" width="108" height="18" rx="6" fill="#d97706"/>
+<text x="400" y="122" text-anchor="middle" font-size="44" fill="#fff">★</text>
+<text x="400" y="244" text-anchor="middle" font-size="22" font-weight="800" fill="#fff" letter-spacing="3">MISI SELESAI!</text>
 </svg>"""
 
 
@@ -479,11 +538,17 @@ def pindah_halaman(nomor):
     st.rerun()
 
 
+# ---------- Pencatatan jawaban & analisis kesalahan ----------
+# Jawaban siswa (benar maupun salah) selalu DIKIRIM dan disimpan.
+# Benar-salahnya tidak ditampilkan langsung, tetapi dibahas di bagian
+# Refleksi pada akhir LKPD (halaman 11).
+
 def _f(x):
     return str(x)
 
 
 def item(label, jawab, benar, ok, catatan="", f=_f):
+    """Satu butir jawaban siswa yang akan dibahas di bagian Refleksi."""
     return {
         "label": label,
         "jawab": f(jawab),
@@ -494,6 +559,7 @@ def item(label, jawab, benar, ok, catatan="", f=_f):
 
 
 def catat(kunci, daftar, masukan):
+    """Menyimpan jawaban terkirim. Boleh dikirim ulang sebelum lanjut."""
     rekam = st.session_state.rekam
     lama = rekam.get(kunci, {})
     jumlah_ok = sum(1 for d in daftar if d["ok"])
@@ -511,6 +577,7 @@ def catat(kunci, daftar, masukan):
 
 
 def awal(kunci, nama, default=0):
+    """Nilai terakhir yang dikirim siswa (untuk mengisi kembali kolom)."""
     return st.session_state.rekam.get(kunci, {}).get("masukan", {}).get(nama, default)
 
 
@@ -524,12 +591,16 @@ def info_terkirim(kunci):
 
 
 def ab_siswa():
+    """a dan b yang dikirim siswa pada Langkah 1 dan 2."""
     return awal("jawab_a", "a", 0), awal("jawab_b", "b", 0)
 
 
 def rumus_siswa():
+    """(koefisien n, konstanta) yang dikirim siswa pada Langkah 3."""
     return awal("jawab_rumus", "koef", 0), awal("jawab_rumus", "konst", 0)
 
+
+# ---------- Diagnosis letak kesalahan (kesalahan umum) ----------
 
 def cat_a(v, a, b, f=_f):
     benar = f"Suku pertama a = U₁ adalah angka paling awal pada barisan, yaitu {f(a)}."
@@ -605,7 +676,10 @@ def cat_n(v, a, b, n_target, f=_f):
     return benar
 
 
+# ---------- Pembahasan di bagian Refleksi ----------
+
 def status_langkah(kunci):
+    """(jumlah butir benar, jumlah butir) atau None jika belum dikerjakan."""
     r = st.session_state.rekam.get(kunci)
     if not r:
         return None
@@ -701,11 +775,15 @@ def navigasi(kembali_ke, lanjut_ke, terbuka, label_kembali="⬅️ Kembali",
                       use_container_width=True, key="nav_kunci")
 
 
+# ---------- Soal kehidupan nyata ----------
+
 def rupiah(x):
+    """10000 -> 'Rp10.000'"""
     return "Rp" + f"{x:,}".replace(",", ".")
 
 
 def ambil_konteks():
+    """Data soal kehidupan nyata: diacak sekali, tetap selama satu misi."""
     if st.session_state.konteks is None:
         baris = random.randint(8, 12)
         st.session_state.konteks = {
@@ -788,6 +866,11 @@ def svg_tabungan(a, b):
 def halaman_masalah(kunci, tag, judul, svg, cerita, c, fmt, tanya_un,
                     tanya_n, sebelum, sesudah, step=1,
                     label_lanjut="➡️ Langkah Berikutnya", aksi_lanjut=None):
+    """Satu halaman soal cerita barisan aritmatika (kursi & tabungan).
+
+    c = {"a", "b", "n_tanya", "n_cari"}; fmt = fungsi penampil nilai.
+    Jawaban dikirim apa adanya; pembahasan benar-salah ada di Refleksi.
+    """
     flag = f"jawab_{kunci}"
     a_, b_ = c["a"], c["b"]
     k_ = a_ - b_
@@ -848,6 +931,7 @@ def halaman_masalah(kunci, tag, judul, svg, cerita, c, fmt, tanya_un,
 
 
 def svg_pasangan(a, b, n=6):
+    """Ilustrasi trik pasangan: suku pertama + terakhir = suku kedua + ke-(n-1) ..."""
     nilai = [a + i * b for i in range(n)]
     xs = [70 + i * 118 for i in range(n)]
     warna = ["#ef4444", "#f59e0b", "#10b981"]
@@ -882,7 +966,65 @@ def svg_pasangan(a, b, n=6):
 </svg>"""
 
 
+def buat_nada_latar():
+    """Nada latar sederhana (dibuat Python) bila file backsound tidak ditemukan."""
+    laju = 11025
+    akor = [
+        (261.63, 329.63, 392.00),   # C
+        (220.00, 261.63, 329.63),   # Am
+        (174.61, 220.00, 261.63),   # F
+        (196.00, 246.94, 293.66),   # G
+    ]
+    dasar_akor = [130.81, 110.00, 87.31, 98.00]
+    n = int(laju * 4.0)             # 4 detik per akor
+    data = array("h")
+    for tri, dasar in zip(akor, dasar_akor):
+        for i in range(n):
+            t = i / laju
+            amplop = math.sin(math.pi * i / n) ** 2        # mulai dan selesai di 0 (loop mulus)
+            getar = 1 + 0.12 * math.sin(2 * math.pi * 0.5 * t)
+            v = 1.5 * math.sin(2 * math.pi * dasar * t)
+            for f in tri:
+                v += math.sin(2 * math.pi * f * t) + 0.35 * math.sin(4 * math.pi * f * t)
+            data.append(int(v / 7.0 * amplop * getar * 0.55 * 32767))
+    if sys.byteorder == "big":
+        data.byteswap()
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(laju)
+        w.writeframes(data.tobytes())
+    return buf.getvalue()
+
+
+@st.cache_resource
+def muat_backsound():
+    """Membaca backsound.mp3 (atau .wav) sefolder dengan aplikasi.
+    Jika tidak ada, memakai nada latar bawaan agar musik tetap berbunyi."""
+    folder = os.path.dirname(os.path.abspath(__file__))
+    for nama, mime in (("backsound.mp3", "audio/mpeg"), ("backsound.wav", "audio/wav")):
+        jalur = os.path.join(folder, nama)
+        if os.path.exists(jalur):
+            with open(jalur, "rb") as f:
+                return f.read(), mime
+    return buat_nada_latar(), "audio/wav"
+
+
+def putar_backsound():
+    data, mime = muat_backsound()
+    if data is None:
+        st.caption("⚠️ File backsound.mp3 belum ada di folder aplikasi.")
+        return
+    st.caption("🎧 Backsound")
+    try:
+        st.audio(data, format=mime, loop=True, autoplay=True)
+    except TypeError:  # Streamlit versi lama belum mengenal loop/autoplay
+        st.audio(data, format=mime)
+
+
 def buat_lkpd_html():
+    """Lembar hasil LKPD (cetak / simpan PDF dari browser)."""
     s = st.session_state
     e = html.escape
     d = SOAL[s.soal_index]
@@ -986,9 +1128,13 @@ st.markdown(
 )
 
 with st.sidebar:
-    st.checkbox("🎷 Backsound Jazz", value=True, key="musik_aktif")
+    st.checkbox("🎵 Backsound", value=True, key="musik_aktif")
     if st.session_state.musik_aktif:
-        putar_backsound()
+        if 2 <= halaman <= TOTAL_HALAMAN - 1:
+            putar_backsound()
+        elif halaman == 1:
+            st.caption("🎧 Backsound menyala otomatis saat misi dimulai.")
+    st.selectbox("🎨 Tema Latar", list(TEMA), key="tema")
     st.markdown("---")
     st.title("🔎 Math Detective")
     st.markdown("---")
@@ -1428,11 +1574,11 @@ elif halaman == 9:
 elif halaman == 10:
     c = ambil_konteks()["tabung"]
     a_, b_ = c["a"], c["b"]
-    n_s = c["n_tanya"] + 4
+    n_s = c["n_tanya"] + 4                      # 12 - 16 minggu
     u6 = a_ + 5 * b_
     un_s = a_ + (n_s - 1) * b_
-    sn_s = n_s * (a_ + un_s) // 2
-    tercapai = c["n_cari"] % 2 == 1
+    sn_s = n_s * (a_ + un_s) // 2               # selalu bilangan bulat
+    tercapai = c["n_cari"] % 2 == 1             # variasi: tercapai / belum
     target = sn_s - 3 * b_ if tercapai else sn_s + 3 * b_
     pilihan_benar = "Ya, target tercapai" if tercapai else "Tidak, target belum tercapai"
     batas = 100_000_000
@@ -1490,24 +1636,29 @@ elif halaman == 10:
 
     if st.button("📨 Kirim Jawaban", use_container_width=True, key="kirim_sn"):
         pasangan = a_ + u6
+        # nomor 1
         c1 = f"U₁ + U₆ = {rupiah(a_)} + {rupiah(u6)} = {rupiah(pasangan)}."
         if ip == 0:
             c1 = "Bagian ini belum kamu isi. " + c1
         elif ip == u6:
             c1 = "Kamu hanya menulis U₆, belum menjumlahkannya dengan U₁. " + c1
+        # nomor 2
         c2 = "Enam suku dipasangkan dua-dua, jadi ada 6 ÷ 2 = 3 pasangan."
         if iq == 6:
             c2 = "Kamu menulis banyak suku (6), bukan banyak pasangan. " + c2
+        # nomor 3
         c3 = (f"S₆ = banyak pasangan × jumlah satu pasangan = 3 × {rupiah(pasangan)} "
               f"= {rupiah(3 * pasangan)}.")
         if is6 == pasangan:
             c3 = "Kamu baru menghitung satu pasangan. " + c3
+        # nomor 5
         c5 = (f"S{sub(n_s)} = n/2 × (a + U{sub(n_s)}) = {n_s}/2 × ({a_} + {un_s}) "
               f"= {rupiah(sn_s)}.")
         if isn == n_s * (a_ + un_s):
             c5 = "Kamu lupa membagi dua (÷ 2) pada rumus Sₙ. " + c5
         elif isn == un_s:
             c5 = "Kamu menulis suku terakhir, bukan jumlah seluruh suku. " + c5
+        # nomor 6
         if ipil == "— pilih —":
             c6 = "Kamu belum memilih jawaban. "
         elif ipil != pilihan_benar:
@@ -1632,7 +1783,7 @@ elif halaman == 11:
             use_container_width=True,
         )
         st.caption("Buka file hasil unduhan di browser, lalu tekan Ctrl+P untuk menyimpannya sebagai PDF.")
-        
+
                 # ---------------------------------------------------
         # FITUR BARU: KIRIM HASIL LKPD KE GOOGLE FORM
         # ---------------------------------------------------
